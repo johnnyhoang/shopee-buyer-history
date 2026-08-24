@@ -11,7 +11,7 @@ import {
   CheckCircle2, 
   Clock, 
   AlertTriangle,
-  RefreshCw
+  Trash2
 } from 'lucide-react';
 
 export const LedgerHeader = () => {
@@ -23,7 +23,7 @@ export const LedgerHeader = () => {
     refundLedgerEntries,
     setIsAccountModalOpen, 
     setIsSyncModalOpen,
-    resetSampleData 
+    clearAllData 
   } = useApp();
 
   return (
@@ -102,13 +102,17 @@ export const LedgerHeader = () => {
               <span>Đồng bộ / Nhập đơn</span>
             </button>
 
-            {/* Reset sample data */}
+            {/* Clear all data */}
             <button
-              onClick={resetSampleData}
-              title="Nạp lại dữ liệu mẫu"
-              className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors"
+              onClick={() => {
+                if (window.confirm('Bạn có chắc chắn muốn xóa sạch toàn bộ dữ liệu trên Sổ Kế Toán?')) {
+                  clearAllData();
+                }
+              }}
+              title="Xóa sạch toàn bộ dữ liệu"
+              className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-slate-100 rounded-lg transition-colors"
             >
-              <RefreshCw className="w-3.5 h-3.5" />
+              <Trash2 className="w-3.5 h-3.5" />
             </button>
 
           </div>

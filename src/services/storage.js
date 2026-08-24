@@ -1,10 +1,19 @@
 import { INITIAL_ACCOUNTS, INITIAL_ORDERS } from '../data/initialData';
 
 const STORAGE_KEYS = {
-  ACCOUNTS: 'shopee_buyer_accounts_v1',
-  ORDERS: 'shopee_buyer_orders_v1',
-  ACTIVE_ACCOUNT: 'shopee_buyer_active_account_v1',
+  ACCOUNTS: 'shopee_buyer_accounts_v2',
+  ORDERS: 'shopee_buyer_orders_v2',
+  ACTIVE_ACCOUNT: 'shopee_buyer_active_account_v2',
 };
+
+// Tự động xóa sạch dữ liệu mẫu v1 cũ trong localStorage của trình duyệt
+try {
+  localStorage.removeItem('shopee_buyer_orders_v1');
+  localStorage.removeItem('shopee_buyer_accounts_v1');
+  localStorage.removeItem('shopee_buyer_active_account_v1');
+} catch (e) {
+  console.warn('Lỗi khi xóa key v1 cũ:', e);
+}
 
 export const storageService = {
   // --- TÀI KHOẢN ---
@@ -175,7 +184,10 @@ export const storageService = {
   },
 
   // Xóa sạch toàn bộ dữ liệu (bắt đầu mới)
-  resetToSampleData: () => {
+  clearAllData: () => {
+    localStorage.removeItem(STORAGE_KEYS.ACCOUNTS);
+    localStorage.removeItem(STORAGE_KEYS.ORDERS);
+    localStorage.removeItem(STORAGE_KEYS.ACTIVE_ACCOUNT);
     localStorage.setItem(STORAGE_KEYS.ACCOUNTS, JSON.stringify(INITIAL_ACCOUNTS));
     localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify([]));
     localStorage.setItem(STORAGE_KEYS.ACTIVE_ACCOUNT, 'ALL');
@@ -191,7 +203,7 @@ export const storageService = {
       accounts: storageService.getAccounts(),
       orders: storageService.getOrders(),
       exportedAt: new Date().toISOString(),
-      version: '1.0',
+      version: '2.0',
     };
     return JSON.stringify(data, null, 2);
   }

@@ -126,13 +126,13 @@ export const AppProvider = ({ children }) => {
     return result;
   };
 
-  // Khôi phục dữ liệu mẫu
-  const resetSampleData = () => {
-    const result = storageService.resetToSampleData();
+  // Xóa sạch toàn bộ dữ liệu
+  const clearAllData = () => {
+    const result = storageService.clearAllData();
     setAccounts(result.accounts);
     setOrders(result.orders);
     setActiveAccountId('ALL');
-    showNotification('Đã nạp lại dữ liệu sổ kế toán mẫu!', 'info');
+    showNotification('Đã xóa sạch toàn bộ dữ liệu trên Sổ Kế Toán!', 'info');
   };
 
   // Quản lý tài khoản
@@ -287,7 +287,7 @@ export const AppProvider = ({ children }) => {
         batchConfirmRefunds,
         batchDisputeRefunds,
         importOrders,
-        resetSampleData,
+        clearAllData,
         addAccount,
         updateAccount,
         deleteAccount,

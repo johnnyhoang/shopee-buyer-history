@@ -8,14 +8,14 @@ export const AppProvider = ({ children }) => {
   const [orders, setOrders] = useState(() => storageService.getOrders());
   const [activeAccountId, setActiveAccountId] = useState(() => storageService.getActiveAccountId());
   
-  // Navigation & Tabs: 'refunds' | 'all-orders' | 'analytics' | 'sync'
-  const [activeTab, setActiveTab] = useState('refunds');
+  // Navigation: 'refund-ledger' (Mặc định: Sổ đối soát hoàn tiền) | 'all-ledger' (Sổ tất cả đơn) | 'sync-guide'
+  const [activeTab, setActiveTab] = useState('refund-ledger');
   
-  // Search & Filter
+  // Filters for Accounting Ledger
   const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState('ALL');
-  const [refundFilter, setRefundFilter] = useState('ALL');
-  const [dateRange, setDateRange] = useState('ALL'); // 'ALL' | '7_DAYS' | '30_DAYS' | 'THIS_YEAR'
+  const [orderTypeFilter, setOrderTypeFilter] = useState('ALL'); // 'ALL' | 'CANCELLED' | 'REFUNDED'
+  const [reconciliationFilter, setReconciliationFilter] = useState('ALL'); // 'ALL' | 'UNRESOLVED' (Chưa nhận) | 'CONFIRMED' (Đã nhận) | 'DISPUTED' (Quá hạn)
+  const [paymentMethodFilter, setPaymentMethodFilter] = useState('ALL');
   
   // Modal states
   const [selectedOrder, setSelectedOrder] = useState(null);
@@ -27,7 +27,7 @@ export const AppProvider = ({ children }) => {
     setNotification({ message, type });
     setTimeout(() => {
       setNotification(null);
-    }, 4000);
+    }, 3500);
   };
 
   const handleSelectAccount = (id) => {
@@ -35,37 +35,94 @@ export const AppProvider = ({ children }) => {
     storageService.setActiveAccountId(id);
   };
 
-  // Cập nhật trạng thái đối soát hoàn tiền
-  const confirmRefundReceived = (orderId, note) => {
-    const updated = storageService.updateRefundStatus(orderId, 'CONFIRMED_RECEIVED', note);
-    setOrders(updated);
-    showNotification('Đã xác nhận nhận đủ tiền! Kết thúc theo dõi đơn hàng.', 'success');
+  // Cập nhật trạng thái đối soát đơn lẻ
+  const updateRefundField = (orderId, updates) => {
+    const currentOrders = storageService.getOrders();
+    const updatedOrders = currentOrders.map(ord => {
+      if (ord.id === orderId || ord.orderCode === orderId) {
+        return { ...ord, ...updates };
+      }
+      return ord;
+    });
+    storageService.saveOrders(updatedOrders);
+    setOrders(updatedOrders);
   };
 
-  const markRefundDisputed = (orderId, note) => {
-    const updated = storageService.updateRefundStatus(orderId, 'DISPUTED', note);
+  // Đổi nhanh trạng thái nhận tiền
+  const toggleRefundStatus = (orderId) => {
+    const currentOrders = storageService.getOrders();
+    const target = currentOrders.find(o => o.id === orderId || o.orderCode === orderId);
+    if (!target) return;
+
+    let nextStatus = 'CONFIRMED_RECEIVED';
+    let nextConfirmedAt = new Date().toISOString();
+
+    if (target.refundStatus === 'CONFIRMED_RECEIVED') {
+      nextStatus = 'SHOPEE_REFUNDED';
+      nextConfirmedAt = null;
+      showNotification(`Đã chuyển đơn #${target.orderCode} về Chưa nhận tiền`, 'info');
+    } else {
+      nextStatus = 'CONFIRMED_RECEIVED';
+      showNotification(`Đã xác nhận nhận đủ tiền đơn #${target.orderCode}!`, 'success');
+    }
+
+    const updated = currentOrders.map(ord => {
+      if (ord.id === orderId || ord.orderCode === orderId) {
+        return {
+          ...ord,
+          refundStatus: nextStatus,
+          refundConfirmedAt: nextConfirmedAt,
+        };
+      }
+      return ord;
+    });
+
+    storageService.saveOrders(updated);
     setOrders(updated);
-    showNotification('Đã gắn cờ đơn hàng Quá hạn / Cần khiếu nại!', 'warning');
   };
 
-  const resetRefundTracking = (orderId) => {
-    const updated = storageService.updateRefundStatus(orderId, 'SHOPEE_REFUNDED');
+  // Xác nhận hàng loạt
+  const batchConfirmRefunds = (orderIds) => {
+    const currentOrders = storageService.getOrders();
+    const now = new Date().toISOString();
+    const updated = currentOrders.map(ord => {
+      if (orderIds.includes(ord.id) || orderIds.includes(ord.orderCode)) {
+        return {
+          ...ord,
+          refundStatus: 'CONFIRMED_RECEIVED',
+          refundConfirmedAt: ord.refundConfirmedAt || now,
+        };
+      }
+      return ord;
+    });
+    storageService.saveOrders(updated);
     setOrders(updated);
-    showNotification('Đã đưa đơn hàng về trạng thái tiếp tục theo dõi tiền hoàn.', 'info');
+    showNotification(`Đã xác nhận nhận tiền thành công cho ${orderIds.length} đơn hàng!`, 'success');
   };
 
-  const saveOrderNote = (orderId, note) => {
-    const updated = storageService.updateOrderNote(orderId, note);
+  // Đánh dấu quá hạn hàng loạt
+  const batchDisputeRefunds = (orderIds) => {
+    const currentOrders = storageService.getOrders();
+    const updated = currentOrders.map(ord => {
+      if (orderIds.includes(ord.id) || orderIds.includes(ord.orderCode)) {
+        return {
+          ...ord,
+          refundStatus: 'DISPUTED',
+        };
+      }
+      return ord;
+    });
+    storageService.saveOrders(updated);
     setOrders(updated);
-    showNotification('Đã lưu ghi chú cho đơn hàng!', 'success');
+    showNotification(`Đã gắn cờ Quá hạn / Cần khiếu nại cho ${orderIds.length} đơn!`, 'warning');
   };
 
-  // Nhập dữ liệu đơn hàng
+  // Nhập dữ liệu
   const importOrders = (incomingOrders, targetAccountId, accountName) => {
     const result = storageService.mergeImportedOrders(incomingOrders, targetAccountId, accountName);
     setOrders(result.allOrders);
     setAccounts(result.allAccounts);
-    showNotification(`Đã đồng bộ thành công! (+${result.newCount} đơn mới, cập nhật ${result.updatedCount} đơn)`, 'success');
+    showNotification(`Đã đồng bộ ${result.allOrders.length} đơn hàng (+${result.newCount} đơn mới)!`, 'success');
     return result;
   };
 
@@ -75,23 +132,23 @@ export const AppProvider = ({ children }) => {
     setAccounts(result.accounts);
     setOrders(result.orders);
     setActiveAccountId('ALL');
-    showNotification('Đã khôi phục lại dữ liệu mẫu Shopee ban đầu!', 'info');
+    showNotification('Đã nạp lại dữ liệu sổ kế toán mẫu!', 'info');
   };
 
   // Quản lý tài khoản
-  const addAccount = (name, username, phone, color = 'indigo') => {
+  const addAccount = (name, username, phone) => {
     const newAcc = {
       id: `acc_${Date.now()}`,
-      name: name || 'Tài khoản Shopee mới',
+      name: name || 'Người mua mới',
       username: username || '',
       phone: phone || '',
-      color,
+      color: 'slate',
       createdAt: new Date().toISOString(),
     };
     const updated = [...accounts, newAcc];
     setAccounts(updated);
     storageService.saveAccounts(updated);
-    showNotification(`Đã thêm tài khoản: ${newAcc.name}`, 'success');
+    showNotification(`Đã thêm người mua: ${newAcc.name}`, 'success');
     return newAcc;
   };
 
@@ -99,40 +156,50 @@ export const AppProvider = ({ children }) => {
     const updated = accounts.map(a => a.id === id ? { ...a, ...fields } : a);
     setAccounts(updated);
     storageService.saveAccounts(updated);
-    showNotification('Đã cập nhật thông tin tài khoản!', 'success');
+    showNotification('Đã cập nhật tên tài khoản!', 'success');
   };
 
   const deleteAccount = (id) => {
     const updated = accounts.filter(a => a.id !== id);
     setAccounts(updated);
     storageService.saveAccounts(updated);
-    if (activeAccountId === id) {
-      handleSelectAccount('ALL');
-    }
+    if (activeAccountId === id) setActiveAccountId('ALL');
     showNotification('Đã xóa tài khoản!', 'info');
   };
 
-  // Danh sách đơn hàng được lọc theo Tài khoản
+  // Lọc theo tài khoản người mua
   const accountOrders = useMemo(() => {
     if (activeAccountId === 'ALL') return orders;
     return orders.filter(o => o.accountId === activeAccountId);
   }, [orders, activeAccountId]);
 
-  // Danh sách đơn hàng Trả/Hủy để theo dõi Hoàn tiền
-  const refundOrders = useMemo(() => {
+  // SỔ ĐỐI SOÁT HOÀN TIỀN (Chỉ gồm các đơn Hủy và Trả hàng)
+  const refundLedgerEntries = useMemo(() => {
     return accountOrders.filter(o => {
       const isRefundOrCancel = o.status === 'CANCELLED' || o.status === 'REFUNDED' || o.status === 'REFUNDING';
       if (!isRefundOrCancel) return false;
 
-      // Filter theo trạng thái hoàn tiền
-      if (refundFilter === 'PENDING_OR_REFUNDED') {
-        return o.refundStatus === 'PENDING' || o.refundStatus === 'SHOPEE_REFUNDED';
-      }
-      if (refundFilter !== 'ALL' && o.refundStatus !== refundFilter) {
-        return false;
+      // Lọc theo loại đơn
+      if (orderTypeFilter === 'CANCELLED' && o.status !== 'CANCELLED') return false;
+      if (orderTypeFilter === 'REFUNDED' && (o.status !== 'REFUNDED' && o.status !== 'REFUNDING')) return false;
+
+      // Lọc theo trạng thái đối soát nhận tiền
+      if (reconciliationFilter === 'UNRESOLVED') {
+        if (o.refundStatus === 'CONFIRMED_RECEIVED') return false;
+      } else if (reconciliationFilter === 'CONFIRMED') {
+        if (o.refundStatus !== 'CONFIRMED_RECEIVED') return false;
+      } else if (reconciliationFilter === 'DISPUTED') {
+        if (o.refundStatus !== 'DISPUTED') return false;
       }
 
-      // Filter search
+      // Lọc theo phương thức thanh toán
+      if (paymentMethodFilter !== 'ALL') {
+        if (!o.paymentMethod || !o.paymentMethod.toLowerCase().includes(paymentMethodFilter.toLowerCase())) {
+          return false;
+        }
+      }
+
+      // Lọc theo từ khóa tìm kiếm
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
         const matchCode = (o.orderCode || '').toLowerCase().includes(q);
@@ -144,58 +211,46 @@ export const AppProvider = ({ children }) => {
 
       return true;
     });
-  }, [accountOrders, refundFilter, searchQuery]);
+  }, [accountOrders, orderTypeFilter, reconciliationFilter, paymentMethodFilter, searchQuery]);
 
-  // Thống kê tổng quan
-  const stats = useMemo(() => {
-    let totalSpend = 0;
-    let totalOrdersCount = accountOrders.length;
-    let completedCount = 0;
-    let shippingCount = 0;
-    let cancelRefundCount = 0;
-    
-    let totalRefundAmount = 0;
-    let pendingRefundAmount = 0;
-    let confirmedRefundAmount = 0;
-    let disputedRefundAmount = 0;
+  // Thống kê tài chính sổ cái
+  const ledgerTotals = useMemo(() => {
+    const allRefundEntries = accountOrders.filter(
+      o => o.status === 'CANCELLED' || o.status === 'REFUNDED' || o.status === 'REFUNDING'
+    );
 
-    accountOrders.forEach(o => {
-      if (o.status === 'COMPLETED') {
-        totalSpend += (o.totalAmount || 0);
-        completedCount++;
-      } else if (o.status === 'SHIPPING' || o.status === 'PROCESSING') {
-        shippingCount++;
-        totalSpend += (o.totalAmount || 0);
-      } else if (o.status === 'CANCELLED' || o.status === 'REFUNDED' || o.status === 'REFUNDING') {
-        cancelRefundCount++;
-        const refAmt = o.refundAmount || o.totalAmount || 0;
-        totalRefundAmount += refAmt;
+    let totalRefundDue = 0; // Tổng số tiền hoàn
+    let totalReceived = 0;  // Đã nhận được
+    let totalPending = 0;   // Còn phải thu hồi
+    let totalDisputed = 0;  // Bị quá hạn/khiếu nại
+    let pendingCount = 0;
+    let confirmedCount = 0;
 
-        if (o.refundStatus === 'CONFIRMED_RECEIVED') {
-          confirmedRefundAmount += refAmt;
-        } else if (o.refundStatus === 'DISPUTED') {
-          disputedRefundAmount += refAmt;
-        } else {
-          // PENDING hoặc SHOPEE_REFUNDED
-          pendingRefundAmount += refAmt;
-        }
+    allRefundEntries.forEach(o => {
+      const amt = o.refundAmount || o.totalAmount || 0;
+      totalRefundDue += amt;
+
+      if (o.refundStatus === 'CONFIRMED_RECEIVED') {
+        totalReceived += amt;
+        confirmedCount++;
+      } else if (o.refundStatus === 'DISPUTED') {
+        totalDisputed += amt;
+        totalPending += amt;
+        pendingCount++;
+      } else {
+        totalPending += amt;
+        pendingCount++;
       }
     });
 
     return {
-      totalSpend,
-      totalOrdersCount,
-      completedCount,
-      shippingCount,
-      cancelRefundCount,
-      totalRefundAmount,
-      pendingRefundAmount,
-      confirmedRefundAmount,
-      disputedRefundAmount,
-      unresolvedRefundsCount: accountOrders.filter(
-        o => (o.status === 'CANCELLED' || o.status === 'REFUNDED' || o.status === 'REFUNDING') &&
-             o.refundStatus !== 'CONFIRMED_RECEIVED'
-      ).length,
+      totalEntries: allRefundEntries.length,
+      totalRefundDue,
+      totalReceived,
+      totalPending,
+      totalDisputed,
+      pendingCount,
+      confirmedCount,
     };
   }, [accountOrders]);
 
@@ -210,15 +265,15 @@ export const AppProvider = ({ children }) => {
         setActiveTab,
         searchQuery,
         setSearchQuery,
-        statusFilter,
-        setStatusFilter,
-        refundFilter,
-        setRefundFilter,
-        dateRange,
-        setDateRange,
+        orderTypeFilter,
+        setOrderTypeFilter,
+        reconciliationFilter,
+        setReconciliationFilter,
+        paymentMethodFilter,
+        setPaymentMethodFilter,
         accountOrders,
-        refundOrders,
-        stats,
+        refundLedgerEntries,
+        ledgerTotals,
         selectedOrder,
         setSelectedOrder,
         isAccountModalOpen,
@@ -227,10 +282,10 @@ export const AppProvider = ({ children }) => {
         setIsSyncModalOpen,
         notification,
         showNotification,
-        confirmRefundReceived,
-        markRefundDisputed,
-        resetRefundTracking,
-        saveOrderNote,
+        updateRefundField,
+        toggleRefundStatus,
+        batchConfirmRefunds,
+        batchDisputeRefunds,
         importOrders,
         resetSampleData,
         addAccount,

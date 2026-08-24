@@ -23,7 +23,7 @@ module.exports = async function handler(req, res) {
     // Đảm bảo account tồn tại
     if (accountName) {
       await db.query(`
-        INSERT INTO shopee_accounts (id, name, username, color)
+        INSERT INTO sp_accounts (id, name, username, color)
         VALUES ($1, $2, $3, 'emerald')
         ON CONFLICT (id) DO NOTHING;
       `, [accountId, accountName, accountId]);
@@ -41,7 +41,7 @@ module.exports = async function handler(req, res) {
       const defaultRefundStatus = isRefundOrCancel ? 'SHOPEE_REFUNDED' : 'NOT_APPLICABLE';
 
       const upsertQuery = `
-        INSERT INTO shopee_orders (
+        INSERT INTO sp_orders (
           id, order_code, account_id, shop_name, status, status_text,
           order_time, cancel_time, total_amount, refund_amount, payment_method,
           refund_status, refund_confirmed_at, cancel_reason, refund_reason, user_note, items, updated_at
@@ -49,15 +49,15 @@ module.exports = async function handler(req, res) {
           $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, NOW()
         )
         ON CONFLICT (order_code) DO UPDATE SET
-          shop_name = COALESCE(EXCLUDED.shop_name, shopee_orders.shop_name),
-          status = COALESCE(EXCLUDED.status, shopee_orders.status),
-          status_text = COALESCE(EXCLUDED.status_text, shopee_orders.status_text),
-          order_time = COALESCE(EXCLUDED.order_time, shopee_orders.order_time),
-          cancel_time = COALESCE(EXCLUDED.cancel_time, shopee_orders.cancel_time),
-          total_amount = COALESCE(EXCLUDED.total_amount, shopee_orders.total_amount),
-          refund_amount = COALESCE(EXCLUDED.refund_amount, shopee_orders.refund_amount),
-          payment_method = COALESCE(EXCLUDED.payment_method, shopee_orders.payment_method),
-          items = COALESCE(EXCLUDED.items, shopee_orders.items),
+          shop_name = COALESCE(EXCLUDED.shop_name, sp_orders.shop_name),
+          status = COALESCE(EXCLUDED.status, sp_orders.status),
+          status_text = COALESCE(EXCLUDED.status_text, sp_orders.status_text),
+          order_time = COALESCE(EXCLUDED.order_time, sp_orders.order_time),
+          cancel_time = COALESCE(EXCLUDED.cancel_time, sp_orders.cancel_time),
+          total_amount = COALESCE(EXCLUDED.total_amount, sp_orders.total_amount),
+          refund_amount = COALESCE(EXCLUDED.refund_amount, sp_orders.refund_amount),
+          payment_method = COALESCE(EXCLUDED.payment_method, sp_orders.payment_method),
+          items = COALESCE(EXCLUDED.items, sp_orders.items),
           updated_at = NOW()
         RETURNING (xmax = 0) AS is_insert;
       `;

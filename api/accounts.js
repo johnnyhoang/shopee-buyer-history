@@ -13,7 +13,7 @@ module.exports = async function handler(req, res) {
     if (req.method === 'GET') {
       const result = await db.query(`
         SELECT id, name, username, phone, color, created_at AS "createdAt"
-        FROM shopee_accounts
+        FROM sp_accounts
         ORDER BY created_at ASC
       `);
       return res.status(200).json(result.rows);
@@ -24,13 +24,13 @@ module.exports = async function handler(req, res) {
       const finalId = id || `acc_${Date.now()}`;
 
       const result = await db.query(`
-        INSERT INTO shopee_accounts (id, name, username, phone, color)
+        INSERT INTO sp_accounts (id, name, username, phone, color)
         VALUES ($1, $2, $3, $4, $5)
         ON CONFLICT (id) DO UPDATE SET
-          name = COALESCE(EXCLUDED.name, shopee_accounts.name),
-          username = COALESCE(EXCLUDED.username, shopee_accounts.username),
-          phone = COALESCE(EXCLUDED.phone, shopee_accounts.phone),
-          color = COALESCE(EXCLUDED.color, shopee_accounts.color)
+          name = COALESCE(EXCLUDED.name, sp_accounts.name),
+          username = COALESCE(EXCLUDED.username, sp_accounts.username),
+          phone = COALESCE(EXCLUDED.phone, sp_accounts.phone),
+          color = COALESCE(EXCLUDED.color, sp_accounts.color)
         RETURNING id, name, username, phone, color, created_at AS "createdAt";
       `, [finalId, name || 'Tài khoản mới', username || '', phone || '', color || 'slate']);
 
@@ -41,7 +41,7 @@ module.exports = async function handler(req, res) {
       const { id } = req.body || req.query;
       if (!id) return res.status(400).json({ error: 'Missing id' });
 
-      await db.query(`DELETE FROM shopee_accounts WHERE id = $1`, [id]);
+      await db.query(`DELETE FROM sp_accounts WHERE id = $1`, [id]);
       return res.status(200).json({ success: true });
     }
 

@@ -13,10 +13,10 @@ async function setup() {
     await client.connect();
     console.log("✅ Kết nối Supabase thành công!");
 
-    // Tạo bảng shopee_accounts
-    console.log("📦 Đang tạo bảng shopee_accounts...");
+    // 1. Tạo bảng sp_accounts (với prefix sp_)
+    console.log("📦 Đang tạo bảng sp_accounts...");
     await client.query(`
-      CREATE TABLE IF NOT EXISTS shopee_accounts (
+      CREATE TABLE IF NOT EXISTS sp_accounts (
         id TEXT PRIMARY KEY,
         name TEXT NOT NULL,
         username TEXT,
@@ -26,13 +26,13 @@ async function setup() {
       );
     `);
 
-    // Tạo bảng shopee_orders
-    console.log("📦 Đang tạo bảng shopee_orders...");
+    // 2. Tạo bảng sp_orders (với prefix sp_)
+    console.log("📦 Đang tạo bảng sp_orders...");
     await client.query(`
-      CREATE TABLE IF NOT EXISTS shopee_orders (
+      CREATE TABLE IF NOT EXISTS sp_orders (
         id TEXT PRIMARY KEY,
         order_code TEXT NOT NULL UNIQUE,
-        account_id TEXT REFERENCES shopee_accounts(id) ON DELETE SET NULL,
+        account_id TEXT REFERENCES sp_accounts(id) ON DELETE SET NULL,
         shop_name TEXT,
         status TEXT,
         status_text TEXT,
@@ -52,42 +52,53 @@ async function setup() {
       );
     `);
 
-    // Tự động chèn tài khoản mặc định nếu chưa có
+    // Chuyển dữ liệu từ shopee_* sang sp_* nếu có
+    try {
+      await client.query(`
+        INSERT INTO sp_accounts SELECT * FROM shopee_accounts ON CONFLICT (id) DO NOTHING;
+      `);
+      await client.query(`
+        INSERT INTO sp_orders SELECT * FROM shopee_orders ON CONFLICT (order_code) DO NOTHING;
+      `);
+      // Xóa bảng cũ không có prefix sp_
+      await client.query(`DROP TABLE IF EXISTS shopee_orders CASCADE;`);
+      await client.query(`DROP TABLE IF EXISTS shopee_accounts CASCADE;`);
+      console.log("🧹 Đã dọn dẹp các bảng cũ và chuyển sang sp_accounts, sp_orders!");
+    } catch (e) {}
+
+    // Tự động chèn tài khoản mặc định
     await client.query(`
-      INSERT INTO shopee_accounts (id, name, username, color)
+      INSERT INTO sp_accounts (id, name, username, color)
       VALUES ('acc_main', 'Tài khoản chính', 'shopee_user', 'slate')
       ON CONFLICT (id) DO NOTHING;
     `);
 
-    // Cấu hình Row Level Security (RLS) để cho phép client đọc/ghi công khai qua API
+    // Cấu hình Row Level Security (RLS)
     await client.query(`
-      ALTER TABLE shopee_accounts ENABLE ROW LEVEL SECURITY;
-      ALTER TABLE shopee_orders ENABLE ROW LEVEL SECURITY;
+      ALTER TABLE sp_accounts ENABLE ROW LEVEL SECURITY;
+      ALTER TABLE sp_orders ENABLE ROW LEVEL SECURITY;
 
-      DROP POLICY IF EXISTS "Allow public read accounts" ON shopee_accounts;
-      DROP POLICY IF EXISTS "Allow public write accounts" ON shopee_accounts;
-      DROP POLICY IF EXISTS "Allow public read orders" ON shopee_orders;
-      DROP POLICY IF EXISTS "Allow public write orders" ON shopee_orders;
+      DROP POLICY IF EXISTS "Allow public read sp_accounts" ON sp_accounts;
+      DROP POLICY IF EXISTS "Allow public write sp_accounts" ON sp_accounts;
+      DROP POLICY IF EXISTS "Allow public read sp_orders" ON sp_orders;
+      DROP POLICY IF EXISTS "Allow public write sp_orders" ON sp_orders;
 
-      CREATE POLICY "Allow public read accounts" ON shopee_accounts FOR ALL USING (true) WITH CHECK (true);
-      CREATE POLICY "Allow public write accounts" ON shopee_accounts FOR ALL USING (true) WITH CHECK (true);
-      CREATE POLICY "Allow public read orders" ON shopee_orders FOR ALL USING (true) WITH CHECK (true);
-      CREATE POLICY "Allow public write orders" ON shopee_orders FOR ALL USING (true) WITH CHECK (true);
+      CREATE POLICY "Allow public read sp_accounts" ON sp_accounts FOR ALL USING (true) WITH CHECK (true);
+      CREATE POLICY "Allow public write sp_accounts" ON sp_accounts FOR ALL USING (true) WITH CHECK (true);
+      CREATE POLICY "Allow public read sp_orders" ON sp_orders FOR ALL USING (true) WITH CHECK (true);
+      CREATE POLICY "Allow public write sp_orders" ON sp_orders FOR ALL USING (true) WITH CHECK (true);
     `);
 
-    // Bật Supabase Realtime cho các bảng
+    // Bật Supabase Realtime
     try {
       await client.query(`
-        ALTER PUBLICATION supabase_realtime ADD TABLE shopee_accounts, shopee_orders;
+        ALTER PUBLICATION supabase_realtime ADD TABLE sp_accounts, sp_orders;
       `);
-      console.log("⚡ Đã bật Realtime đồng bộ tức thì!");
-    } catch (realtimeErr) {
-      console.log("ℹ️ Realtime publication đã tồn tại hoặc cần bật qua dashboard.");
-    }
+    } catch (realtimeErr) {}
 
-    console.log("🎉 KHỞI TẠO CƠ SỞ DỮ LIỆU SUPABASE THÀNH CÔNG RỰC RỠ!");
+    console.log("🎉 KHỞI TẠO BẢNG TIỀN TỐ sp_ THÀNH CÔNG RỰC RỠ!");
   } catch (err) {
-    console.error("❌ Lỗi khi khởi tạo Supabase:", err);
+    console.error("❌ Lỗi:", err);
   } finally {
     await client.end();
   }

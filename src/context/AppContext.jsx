@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
 import { storageService } from '../services/storage';
+import { normalizePaymentMethod } from '../utils/formatters';
 
 const AppContext = createContext(null);
 
@@ -192,21 +193,11 @@ export const AppProvider = ({ children }) => {
         if (o.refundStatus !== 'DISPUTED') return false;
       }
 
-      // Lọc theo phương thức hoàn tiền thông minh
+      // Lọc theo phương thức hoàn tiền (chuẩn hóa 100%)
       if (paymentMethodFilter !== 'ALL') {
-        const pm = (o.paymentMethod || '').toLowerCase();
-        if (paymentMethodFilter === 'CARD') {
-          if (!pm.includes('thẻ') && !pm.includes('visa') && !pm.includes('master') && !pm.includes('credit') && !pm.includes('ghi nợ')) return false;
-        } else if (paymentMethodFilter === 'SHOPEEPAY') {
-          if (!pm.includes('shopeepay') && !pm.includes('ví') && !pm.includes('wallet') && !pm.includes('spay')) return false;
-        } else if (paymentMethodFilter === 'BANK') {
-          if (!pm.includes('ngân hàng') && !pm.includes('atm') && !pm.includes('chuyển khoản') && !pm.includes('ibanking') && !pm.includes('vcb') && !pm.includes('tcb') && !pm.includes('vietcombank') && !pm.includes('techcombank')) return false;
-        } else if (paymentMethodFilter === 'COD') {
-          if (!pm.includes('cod') && !pm.includes('nhận hàng') && !pm.includes('tiền mặt')) return false;
-        } else if (paymentMethodFilter === 'SPAYLATER') {
-          if (!pm.includes('spaylater') && !pm.includes('trả sau')) return false;
-        } else {
-          if (!pm.includes(paymentMethodFilter.toLowerCase())) return false;
+        const normPM = normalizePaymentMethod(o.paymentMethod);
+        if (normPM !== paymentMethodFilter) {
+          return false;
         }
       }
 

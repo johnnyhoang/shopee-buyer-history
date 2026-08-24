@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { formatCurrency, formatDate, getStatusBadge } from '../utils/formatters';
-import { Search, Layers, Store, ExternalLink } from 'lucide-react';
+import { Search, Layers, Store, ExternalLink, ArrowDownCircle } from 'lucide-react';
 
 export const FullHistoryLedgerTable = () => {
   const { 
@@ -13,6 +13,11 @@ export const FullHistoryLedgerTable = () => {
   } = useApp();
 
   const [statusFilter, setStatusFilter] = useState('ALL');
+  const [visibleCount, setVisibleCount] = useState(50);
+
+  useEffect(() => {
+    setVisibleCount(50);
+  }, [statusFilter, searchQuery]);
 
   const getAccountName = (id) => {
     const acc = accounts.find(a => a.id === id);
@@ -32,6 +37,12 @@ export const FullHistoryLedgerTable = () => {
   });
 
   const totalSpent = filteredOrders.reduce((sum, o) => sum + (o.totalAmount || 0), 0);
+  const displayedOrders = filteredOrders.slice(0, visibleCount);
+  const hasMore = visibleCount < filteredOrders.length;
+
+  const handleLoadMore = () => {
+    setVisibleCount(prev => Math.min(prev + 50, filteredOrders.length));
+  };
 
   return (
     <div className="space-y-4">
@@ -89,14 +100,14 @@ export const FullHistoryLedgerTable = () => {
             </thead>
 
             <tbody className="divide-y divide-slate-200">
-              {filteredOrders.length === 0 ? (
+              {displayedOrders.length === 0 ? (
                 <tr>
                   <td colSpan="8" className="py-10 text-center text-slate-400 font-medium">
                     Không tìm thấy đơn hàng nào.
                   </td>
                 </tr>
               ) : (
-                filteredOrders.map((order, idx) => {
+                displayedOrders.map((order, idx) => {
                   const badge = getStatusBadge(order.status);
                   const firstItem = order.items?.[0];
                   const otherCount = (order.items?.length || 1) - 1;
@@ -145,7 +156,6 @@ export const FullHistoryLedgerTable = () => {
               )}
             </tbody>
 
-            {/* Total Footer */}
             {filteredOrders.length > 0 && (
               <tfoot className="bg-slate-100 border-t-2 border-slate-300 font-mono text-xs font-bold text-slate-900">
                 <tr>
@@ -159,10 +169,32 @@ export const FullHistoryLedgerTable = () => {
                 </tr>
               </tfoot>
             )}
-
           </table>
         </div>
       </div>
+
+      {/* Pagination / Load More Bar */}
+      {filteredOrders.length > 0 && (
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-white p-3.5 rounded-xl border border-slate-300 text-xs">
+          <span className="text-slate-600 font-medium">
+            Đang hiển thị <strong>{displayedOrders.length}</strong> / <strong>{filteredOrders.length}</strong> đơn hàng
+          </span>
+
+          {hasMore ? (
+            <button
+              onClick={handleLoadMore}
+              className="bg-slate-900 hover:bg-slate-800 text-white font-bold px-4 py-2 rounded-lg shadow-xs flex items-center gap-1.5 transition-all hover:scale-[1.01]"
+            >
+              <ArrowDownCircle className="w-4 h-4 text-amber-400" />
+              <span>Tải thêm 50 đơn tiếp theo (còn {filteredOrders.length - visibleCount} đơn)</span>
+            </button>
+          ) : (
+            <span className="text-slate-400 font-semibold italic">
+              Đã hiển thị toàn bộ danh sách đơn hàng
+            </span>
+          )}
+        </div>
+      )}
 
     </div>
   );

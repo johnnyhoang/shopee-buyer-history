@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useApp } from '../context/AppContext';
-import { formatCurrency, formatDate } from '../utils/formatters';
+import { formatCurrency, formatDate, normalizePaymentMethod, PAYMENT_METHODS } from '../utils/formatters';
 import { 
   CheckCircle2, 
   Clock, 
@@ -11,11 +11,8 @@ import {
   Edit2, 
   Check, 
   X, 
-  ArrowUpDown,
-  Filter,
-  CreditCard,
-  Building,
-  Wallet
+  ChevronDown,
+  ArrowDownCircle
 } from 'lucide-react';
 
 export const RefundLedgerTable = () => {
@@ -42,6 +39,15 @@ export const RefundLedgerTable = () => {
   const [selectedIds, setSelectedIds] = useState([]);
   const [editingNoteId, setEditingNoteId] = useState(null);
   const [tempNoteValue, setTempNoteValue] = useState('');
+  
+  // Phân trang 50 dòng + Cuộn tải tiếp (Infinite Scroll / Pagination)
+  const [visibleCount, setVisibleCount] = useState(50);
+  const tableBottomRef = useRef(null);
+
+  // Reset phân trang khi đổi bộ lọc hoặc tìm kiếm
+  useEffect(() => {
+    setVisibleCount(50);
+  }, [orderTypeFilter, reconciliationFilter, paymentMethodFilter, searchQuery]);
 
   const getAccountName = (id) => {
     const acc = accounts.find(a => a.id === id);
@@ -76,13 +82,21 @@ export const RefundLedgerTable = () => {
     setEditingNoteId(null);
   };
 
-  // Calculate Column Totals
+  // Calculate Column Totals (trên toàn bộ kết quả lọc)
   const totalPaid = refundLedgerEntries.reduce((sum, o) => sum + (o.totalAmount || 0), 0);
   const totalRefund = refundLedgerEntries.reduce((sum, o) => sum + (o.refundAmount || o.totalAmount || 0), 0);
   const totalConfirmed = refundLedgerEntries
     .filter(o => o.refundStatus === 'CONFIRMED_RECEIVED')
     .reduce((sum, o) => sum + (o.refundAmount || o.totalAmount || 0), 0);
   const totalPending = totalRefund - totalConfirmed;
+
+  // Danh sách dòng đang được hiển thị theo phân trang
+  const displayedEntries = refundLedgerEntries.slice(0, visibleCount);
+  const hasMore = visibleCount < refundLedgerEntries.length;
+
+  const handleLoadMore = () => {
+    setVisibleCount(prev => Math.min(prev + 50, refundLedgerEntries.length));
+  };
 
   return (
     <div className="space-y-4">
@@ -170,11 +184,11 @@ export const RefundLedgerTable = () => {
             className="bg-slate-100 text-slate-800 font-semibold p-1.5 rounded-lg border border-slate-300 focus:outline-none cursor-pointer"
           >
             <option value="ALL">💳 Mọi phương thức hoàn</option>
-            <option value="CARD">💳 Thẻ tín dụng / Ghi nợ</option>
-            <option value="SHOPEEPAY">👛 Ví ShopeePay</option>
-            <option value="BANK">🏦 Tài khoản Ngân hàng / ATM</option>
-            <option value="SPAYLATER">⚡ SPayLater</option>
-            <option value="COD">📦 Tiền mặt (COD)</option>
+            {PAYMENT_METHODS.map(pm => (
+              <option key={pm.key} value={pm.key}>
+                {pm.icon} {pm.label}
+              </option>
+            ))}
           </select>
 
         </div>
@@ -244,14 +258,14 @@ export const RefundLedgerTable = () => {
                   />
                 </th>
                 <th className="py-2.5 px-2 text-center w-10 font-bold">STT</th>
-                <th className="py-2.5 px-3 w-28">Ngày hủy/trả</th>
+                <th className="py-2.5 px-3 w-28">Ngày phát sinh</th>
                 <th className="py-2.5 px-3 w-32">Người mua</th>
                 <th className="py-2.5 px-3 w-28 font-mono">Mã đơn</th>
                 <th className="py-2.5 px-3 min-w-[220px]">Nội dung hàng hóa & Shop</th>
                 <th className="py-2.5 px-2 text-center w-20">Loại</th>
                 <th className="py-2.5 px-3 text-right w-28">Thanh toán</th>
                 <th className="py-2.5 px-3 text-right w-32 font-bold text-amber-300">Tiền hoàn lại</th>
-                <th className="py-2.5 px-3 w-36">Phương thức hoàn</th>
+                <th className="py-2.5 px-3 w-40">Phương thức hoàn</th>
                 <th className="py-2.5 px-3 text-center w-36">Trạng thái đối soát</th>
                 <th className="py-2.5 px-3 min-w-[180px]">Ghi chú sổ sách</th>
               </tr>
@@ -259,17 +273,19 @@ export const RefundLedgerTable = () => {
 
             {/* Body Rows */}
             <tbody className="divide-y divide-slate-200">
-              {refundLedgerEntries.length === 0 ? (
+              {displayedEntries.length === 0 ? (
                 <tr>
                   <td colSpan="12" className="py-12 text-center">
                     <div className="max-w-md mx-auto space-y-2">
                       <div className="text-slate-800 font-bold text-sm">
-                        Chưa có đơn Hủy hoặc Trả hàng nào cần đối soát.
+                        {paymentMethodFilter !== 'ALL' || reconciliationFilter !== 'ALL' || orderTypeFilter !== 'ALL' || searchQuery
+                          ? 'Không tìm thấy đơn hàng nào khớp với bộ lọc hiện tại.'
+                          : 'Chưa có đơn Hủy hoặc Trả hàng nào cần đối soát.'}
                       </div>
-                      {accountOrders.length > 0 ? (
+                      {accountOrders.length > 0 && paymentMethodFilter === 'ALL' && reconciliationFilter === 'ALL' && orderTypeFilter === 'ALL' && !searchQuery ? (
                         <div className="bg-amber-50 p-4 rounded-xl border border-amber-200 space-y-2">
                           <p className="text-xs text-amber-900 font-medium">
-                            Bạn vừa nạp <strong>{accountOrders.length}</strong> đơn hàng thành công (không có đơn hủy/trả hàng).
+                            Bạn đang có <strong>{accountOrders.length}</strong> đơn mua hoàn thành trong hệ thống (không có đơn hủy/trả hàng).
                           </p>
                           <button
                             onClick={() => setActiveTab('all-ledger')}
@@ -280,20 +296,21 @@ export const RefundLedgerTable = () => {
                         </div>
                       ) : (
                         <p className="text-xs text-slate-500">
-                          Hãy bấm nút <strong>"Đồng bộ / Nhập đơn"</strong> ở góc trên bên phải để nạp file đơn hàng của bạn.
+                          Hãy thử điều chỉnh lại bộ lọc hoặc bấm nút <strong>"Đồng bộ / Nhập đơn"</strong> để nạp dữ liệu.
                         </p>
                       )}
                     </div>
                   </td>
                 </tr>
               ) : (
-                refundLedgerEntries.map((order, index) => {
+                displayedEntries.map((order, index) => {
                   const isSelected = selectedIds.includes(order.id);
                   const isFinished = order.refundStatus === 'CONFIRMED_RECEIVED';
                   const isDisputed = order.refundStatus === 'DISPUTED';
                   const isEditingNote = editingNoteId === order.id;
                   const firstItem = order.items?.[0];
                   const otherItemsCount = (order.items?.length || 1) - 1;
+                  const currentPM = normalizePaymentMethod(order.paymentMethod);
 
                   return (
                     <tr 
@@ -390,31 +407,19 @@ export const RefundLedgerTable = () => {
                         </span>
                       </td>
 
-                      {/* Phương thức hoàn */}
-                      <td className="py-2.5 px-3 text-[11px] whitespace-nowrap">
+                      {/* Phương thức hoàn (Đồng bộ chuẩn 100% với bộ lọc) */}
+                      <td className="py-2 px-3 text-[11px] whitespace-nowrap">
                         <select
-                          value={
-                            (order.paymentMethod || '').toLowerCase().includes('thẻ') || (order.paymentMethod || '').toLowerCase().includes('visa') || (order.paymentMethod || '').toLowerCase().includes('credit')
-                              ? 'Thẻ tín dụng / Ghi nợ'
-                              : (order.paymentMethod || '').toLowerCase().includes('shopeepay') || (order.paymentMethod || '').toLowerCase().includes('ví')
-                              ? 'Ví ShopeePay'
-                              : (order.paymentMethod || '').toLowerCase().includes('ngân hàng') || (order.paymentMethod || '').toLowerCase().includes('atm') || (order.paymentMethod || '').toLowerCase().includes('chuyển khoản')
-                              ? 'Tài khoản Ngân hàng'
-                              : (order.paymentMethod || '').toLowerCase().includes('spaylater')
-                              ? 'SPayLater'
-                              : (order.paymentMethod || '').toLowerCase().includes('cod')
-                              ? 'COD (Tiền mặt)'
-                              : order.paymentMethod || 'Ví ShopeePay'
-                          }
+                          value={currentPM}
                           onChange={(e) => updateRefundField(order.id, { paymentMethod: e.target.value })}
-                          className="bg-slate-100 hover:bg-white text-slate-800 text-[11px] font-semibold py-1 px-2 rounded border border-slate-200 focus:outline-none focus:ring-1 focus:ring-slate-900 cursor-pointer max-w-[140px] truncate"
+                          className="bg-slate-100 hover:bg-white text-slate-800 text-[11px] font-semibold py-1 px-2 rounded border border-slate-300 focus:outline-none focus:ring-1 focus:ring-slate-900 cursor-pointer max-w-[150px] truncate"
                           title="Bấm để đổi phương thức hoàn tiền"
                         >
-                          <option value="Ví ShopeePay">👛 Ví ShopeePay</option>
-                          <option value="Thẻ tín dụng / Ghi nợ">💳 Thẻ tín dụng / Ghi nợ</option>
-                          <option value="Tài khoản Ngân hàng">🏦 Tài khoản Ngân hàng</option>
-                          <option value="SPayLater">⚡ SPayLater</option>
-                          <option value="COD (Tiền mặt)">📦 COD (Tiền mặt)</option>
+                          {PAYMENT_METHODS.map(pm => (
+                            <option key={pm.key} value={pm.key}>
+                              {pm.icon} {pm.label}
+                            </option>
+                          ))}
                         </select>
                       </td>
 
@@ -507,7 +512,7 @@ export const RefundLedgerTable = () => {
               <tfoot className="bg-slate-100 border-t-2 border-slate-300 font-mono text-xs font-bold text-slate-900">
                 <tr>
                   <td colSpan="6" className="py-3 px-4 text-right uppercase tracking-wider text-slate-600">
-                    Tổng cộng ({refundLedgerEntries.length} đơn):
+                    Tổng cộng toàn bộ ({refundLedgerEntries.length} đơn):
                   </td>
                   <td className="py-3 px-2 text-center text-slate-500">--</td>
                   <td className="py-3 px-3 text-right text-slate-600">
@@ -529,6 +534,29 @@ export const RefundLedgerTable = () => {
           </table>
         </div>
       </div>
+
+      {/* Pagination / Load More Bar */}
+      {refundLedgerEntries.length > 0 && (
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-white p-3.5 rounded-xl border border-slate-300 text-xs">
+          <span className="text-slate-600 font-medium">
+            Đang hiển thị <strong>{displayedEntries.length}</strong> / <strong>{refundLedgerEntries.length}</strong> đơn hàng
+          </span>
+
+          {hasMore ? (
+            <button
+              onClick={handleLoadMore}
+              className="bg-slate-900 hover:bg-slate-800 text-white font-bold px-4 py-2 rounded-lg shadow-xs flex items-center gap-1.5 transition-all hover:scale-[1.01]"
+            >
+              <ArrowDownCircle className="w-4 h-4 text-amber-400" />
+              <span>Tải thêm 50 đơn tiếp theo (còn {refundLedgerEntries.length - visibleCount} đơn)</span>
+            </button>
+          ) : (
+            <span className="text-slate-400 font-semibold italic">
+              Đã hiển thị toàn bộ danh sách đơn hàng
+            </span>
+          )}
+        </div>
+      )}
 
     </div>
   );

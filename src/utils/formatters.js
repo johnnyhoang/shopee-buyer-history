@@ -94,3 +94,38 @@ export const getRefundStatusInfo = (status) => {
       };
   }
 };
+
+/**
+ * Chuẩn hóa phương thức thanh toán để đồng bộ 100% giữa Bộ lọc và Bảng hiển thị
+ */
+export const normalizePaymentMethod = (pm) => {
+  if (!pm) return 'SHOPEEPAY';
+  const str = String(pm).trim().toLowerCase();
+  
+  // Nếu là raw string từ script cũ "Ví ShopeePay / Thẻ / Ngân hàng" -> mặc định về SHOPEEPAY
+  if (str.includes('ví shopeepay') && str.includes('thẻ') && str.includes('ngân hàng')) {
+    return 'SHOPEEPAY';
+  }
+
+  if (str === 'card' || str.includes('thẻ') || str.includes('credit') || str.includes('visa') || str.includes('master') || str.includes('ghi nợ')) {
+    return 'CARD';
+  }
+  if (str === 'bank' || str.includes('ngân hàng') || str.includes('atm') || str.includes('chuyển khoản') || str.includes('ibanking') || str.includes('vcb') || str.includes('tcb')) {
+    return 'BANK';
+  }
+  if (str === 'spaylater' || str.includes('trả sau')) {
+    return 'SPAYLATER';
+  }
+  if (str === 'cod' || str.includes('tiền mặt') || str.includes('nhận hàng')) {
+    return 'COD';
+  }
+  return 'SHOPEEPAY';
+};
+
+export const PAYMENT_METHODS = [
+  { key: 'SHOPEEPAY', label: 'Ví ShopeePay', icon: '👛' },
+  { key: 'CARD', label: 'Thẻ tín dụng / Ghi nợ', icon: '💳' },
+  { key: 'BANK', label: 'Tài khoản Ngân hàng / ATM', icon: '🏦' },
+  { key: 'SPAYLATER', label: 'SPayLater', icon: '⚡' },
+  { key: 'COD', label: 'Tiền mặt (COD)', icon: '📦' },
+];

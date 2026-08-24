@@ -1,0 +1,32 @@
+[
+  {
+    "id": "shopee_1787541487219",
+    "orderCode": "1787541487219",
+    "shopName": "Shopee Shop",
+    "status": "COMPLETED",
+    "statusText": "Hoàn thành",
+    "orderTime": "2026-08-24T03:18:07.219Z",
+    "cancelTime": null,
+    "totalAmount": 0,
+    "refundAmount": 0,
+    "paymentMethod": "ShopeePay / Thẻ",
+    "cancelReason": "",
+    "refundReason": "",
+    "items": []
+  },
+  {
+    "id": "shopee_1787541500473",
+    "orderCode": "1787541500473",
+    "shopName": "Shopee Shop",
+    "status": "COMPLETED",
+    "statusText": "Hoàn thành",
+    "orderTime": "2026-08-24T03:18:20.473Z",
+    "cancelTime": null,
+    "totalAmount": 0,
+    "refundAmount": 0,
+    "paymentMethod": "ShopeePay / Thẻ",
+    "cancelReason": "",
+    "refundReason": "",
+    "items": []
+  }
+]

@@ -43,13 +43,13 @@ export const storageService = {
     try {
       const data = localStorage.getItem(STORAGE_KEYS.ORDERS);
       if (!data) {
-        localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(INITIAL_ORDERS));
-        return INITIAL_ORDERS;
+        localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify([]));
+        return [];
       }
       return JSON.parse(data);
     } catch (e) {
       console.error('Lỗi khi đọc danh sách đơn hàng:', e);
-      return INITIAL_ORDERS;
+      return [];
     }
   },
 
@@ -174,14 +174,14 @@ export const storageService = {
     };
   },
 
-  // Khôi phục dữ liệu mẫu
+  // Xóa sạch toàn bộ dữ liệu (bắt đầu mới)
   resetToSampleData: () => {
     localStorage.setItem(STORAGE_KEYS.ACCOUNTS, JSON.stringify(INITIAL_ACCOUNTS));
-    localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(INITIAL_ORDERS));
+    localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify([]));
     localStorage.setItem(STORAGE_KEYS.ACTIVE_ACCOUNT, 'ALL');
     return {
       accounts: INITIAL_ACCOUNTS,
-      orders: INITIAL_ORDERS,
+      orders: [],
     };
   },
 

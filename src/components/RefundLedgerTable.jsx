@@ -12,7 +12,10 @@ import {
   Check, 
   X, 
   ChevronDown,
-  ArrowDownCircle
+  ArrowDownCircle,
+  Trash2,
+  Ban,
+  XCircle
 } from 'lucide-react';
 
 export const RefundLedgerTable = () => {
@@ -33,6 +36,9 @@ export const RefundLedgerTable = () => {
     updateRefundField,
     batchConfirmRefunds,
     batchDisputeRefunds,
+    deleteOrder,
+    batchDeleteOrders,
+    markNoRefundNeeded,
     setSelectedOrder
   } = useApp();
 
@@ -209,26 +215,51 @@ export const RefundLedgerTable = () => {
 
       {/* Batch Action Bar (khi có dòng được chọn) */}
       {selectedIds.length > 0 && (
-        <div className="bg-amber-50 border border-amber-300 p-2.5 rounded-xl flex items-center justify-between text-xs animate-in fade-in duration-100">
+        <div className="bg-amber-50 border border-amber-300 p-2.5 rounded-xl flex flex-wrap items-center justify-between gap-2 text-xs animate-in fade-in duration-100">
           <div className="font-bold text-amber-900 flex items-center gap-2">
             <CheckSquare className="w-4 h-4 text-amber-700" />
             <span>Đã chọn <strong>{selectedIds.length}</strong> đơn trong sổ</span>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-1.5">
             <button
               onClick={() => batchConfirmRefunds(selectedIds)}
-              className="bg-emerald-700 hover:bg-emerald-800 text-white px-3 py-1.5 rounded-lg font-bold flex items-center gap-1 shadow-xs transition-colors"
+              className="bg-emerald-700 hover:bg-emerald-800 text-white px-2.5 py-1.5 rounded-lg font-bold flex items-center gap-1 shadow-xs transition-colors"
             >
               <CheckCircle2 className="w-3.5 h-3.5" />
-              Đánh dấu Đã nhận tiền ({selectedIds.length})
+              Đã nhận tiền ({selectedIds.length})
+            </button>
+            <button
+              onClick={() => {
+                if (window.confirm(`Đánh dấu ${selectedIds.length} đơn là Chưa thanh toán (Không cần hoàn tiền)? Các đơn này sẽ được đưa ra khỏi Sổ Đối Soát Hoàn Tiền.`)) {
+                  selectedIds.forEach(id => markNoRefundNeeded(id));
+                  setSelectedIds([]);
+                }
+              }}
+              className="bg-slate-700 hover:bg-slate-800 text-white px-2.5 py-1.5 rounded-lg font-bold flex items-center gap-1 transition-colors"
+              title="Đơn hủy khi chưa thanh toán tiền (không phát sinh hoàn tiền)"
+            >
+              <Ban className="w-3.5 h-3.5 text-slate-300" />
+              Chưa TT (Bỏ hoàn) ({selectedIds.length})
             </button>
             <button
               onClick={() => batchDisputeRefunds(selectedIds)}
-              className="bg-rose-700 hover:bg-rose-800 text-white px-3 py-1.5 rounded-lg font-bold flex items-center gap-1 transition-colors"
+              className="bg-rose-700 hover:bg-rose-800 text-white px-2.5 py-1.5 rounded-lg font-bold flex items-center gap-1 transition-colors"
             >
               <AlertTriangle className="w-3.5 h-3.5" />
               Gắn cờ Quá hạn
+            </button>
+            <button
+              onClick={() => {
+                if (window.confirm(`Bạn có chắc muốn XÓA HẲN ${selectedIds.length} đơn hàng đã chọn khỏi hệ thống?`)) {
+                  batchDeleteOrders(selectedIds);
+                  setSelectedIds([]);
+                }
+              }}
+              className="bg-rose-950 hover:bg-rose-900 text-rose-200 border border-rose-800 px-2.5 py-1.5 rounded-lg font-bold flex items-center gap-1 transition-colors"
+            >
+              <Trash2 className="w-3.5 h-3.5 text-rose-400" />
+              Xóa đơn ({selectedIds.length})
             </button>
             <button
               onClick={() => setSelectedIds([])}
@@ -266,8 +297,9 @@ export const RefundLedgerTable = () => {
                 <th className="py-2.5 px-3 text-right w-28">Thanh toán</th>
                 <th className="py-2.5 px-3 text-right w-32 font-bold text-amber-300">Tiền hoàn lại</th>
                 <th className="py-2.5 px-3 w-40">Phương thức hoàn</th>
-                <th className="py-2.5 px-3 text-center w-36">Trạng thái đối soát</th>
-                <th className="py-2.5 px-3 min-w-[180px]">Ghi chú sổ sách</th>
+                <th className="py-2.5 px-3 text-center w-40">Trạng thái đối soát</th>
+                <th className="py-2.5 px-3 min-w-[160px]">Ghi chú sổ sách</th>
+                <th className="py-2.5 px-2 text-center w-10">Xóa</th>
               </tr>
             </thead>
 
@@ -275,7 +307,7 @@ export const RefundLedgerTable = () => {
             <tbody className="divide-y divide-slate-200">
               {displayedEntries.length === 0 ? (
                 <tr>
-                  <td colSpan="12" className="py-12 text-center">
+                  <td colSpan="13" className="py-12 text-center">
                     <div className="max-w-md mx-auto space-y-2">
                       <div className="text-slate-800 font-bold text-sm">
                         {paymentMethodFilter !== 'ALL' || reconciliationFilter !== 'ALL' || orderTypeFilter !== 'ALL' || searchQuery
@@ -423,37 +455,52 @@ export const RefundLedgerTable = () => {
                         </select>
                       </td>
 
-                      {/* Đối soát nhận tiền (1-Click Toggle) */}
+                      {/* Đối soát nhận tiền (1-Click Toggle + Chưa TT Option) */}
                       <td className="py-2.5 px-3 text-center whitespace-nowrap">
-                        {isFinished ? (
+                        <div className="flex items-center justify-center gap-1">
+                          {isFinished ? (
+                            <button
+                              onClick={() => toggleRefundStatus(order.id)}
+                              title="Bấm để chuyển về Chưa nhận tiền nếu muốn theo dõi lại"
+                              className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-[11px] px-2 py-1 rounded-md shadow-xs flex items-center justify-center gap-1 transition-all"
+                            >
+                              <CheckCircle2 className="w-3.5 h-3.5" />
+                              ĐÃ NHẬN TIỀN
+                            </button>
+                          ) : isDisputed ? (
+                            <button
+                              onClick={() => toggleRefundStatus(order.id)}
+                              title="Bấm để xác nhận đã nhận đủ tiền"
+                              className="bg-rose-700 hover:bg-rose-800 text-white font-bold text-[11px] px-2 py-1 rounded-md shadow-xs flex items-center justify-center gap-1 transition-all"
+                            >
+                              <AlertTriangle className="w-3.5 h-3.5" />
+                              QUÁ HẠN
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => toggleRefundStatus(order.id)}
+                              title="Bấm để xác nhận đã nhận đủ tiền vào tài khoản"
+                              className="bg-amber-100 hover:bg-emerald-600 hover:text-white text-amber-900 border border-amber-300 font-bold text-[11px] px-2 py-1 rounded-md flex items-center justify-center gap-1 transition-all group"
+                            >
+                              <Clock className="w-3.5 h-3.5 text-amber-700 group-hover:text-white" />
+                              <span className="group-hover:hidden">CHƯA NHẬN</span>
+                              <span className="hidden group-hover:inline">BẤM ĐÃ NHẬN</span>
+                            </button>
+                          )}
+
+                          {/* Quick Chưa TT Button */}
                           <button
-                            onClick={() => toggleRefundStatus(order.id)}
-                            title="Bấm để chuyển về Chưa nhận tiền nếu muốn theo dõi lại"
-                            className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-[11px] px-2.5 py-1 rounded-md shadow-xs flex items-center justify-center gap-1 mx-auto transition-all"
+                            onClick={() => {
+                              if (window.confirm('Đánh dấu đơn này là Chưa thanh toán (Không cần hoàn tiền)? Đơn sẽ được gỡ khỏi Sổ Hoàn Tiền.')) {
+                                markNoRefundNeeded(order.id);
+                              }
+                            }}
+                            title="Đơn hủy khi chưa thanh toán (Bỏ theo dõi hoàn tiền)"
+                            className="p-1 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded transition-colors"
                           >
-                            <CheckCircle2 className="w-3.5 h-3.5" />
-                            ĐÃ NHẬN TIỀN
+                            <Ban className="w-3.5 h-3.5" />
                           </button>
-                        ) : isDisputed ? (
-                          <button
-                            onClick={() => toggleRefundStatus(order.id)}
-                            title="Bấm để xác nhận đã nhận đủ tiền"
-                            className="bg-rose-700 hover:bg-rose-800 text-white font-bold text-[11px] px-2.5 py-1 rounded-md shadow-xs flex items-center justify-center gap-1 mx-auto transition-all"
-                          >
-                            <AlertTriangle className="w-3.5 h-3.5" />
-                            QUÁ HẠN
-                          </button>
-                        ) : (
-                          <button
-                            onClick={() => toggleRefundStatus(order.id)}
-                            title="Bấm để xác nhận đã nhận đủ tiền vào tài khoản"
-                            className="bg-amber-100 hover:bg-emerald-600 hover:text-white text-amber-900 border border-amber-300 font-bold text-[11px] px-2.5 py-1 rounded-md flex items-center justify-center gap-1 mx-auto transition-all group"
-                          >
-                            <Clock className="w-3.5 h-3.5 text-amber-700 group-hover:text-white" />
-                            <span className="group-hover:hidden">CHƯA NHẬN</span>
-                            <span className="hidden group-hover:inline">BẤM ĐÃ NHẬN</span>
-                          </button>
-                        )}
+                        </div>
                       </td>
 
                       {/* Ghi chú sổ sách (Inline Editable) */}
@@ -501,6 +548,21 @@ export const RefundLedgerTable = () => {
                         )}
                       </td>
 
+                      {/* Xóa đơn lẻ */}
+                      <td className="py-2.5 px-2 text-center">
+                        <button
+                          onClick={() => {
+                            if (window.confirm(`Bạn có chắc muốn xóa đơn #${order.orderCode} khỏi hệ thống?`)) {
+                              deleteOrder(order.id);
+                            }
+                          }}
+                          title="Xóa đơn hàng này"
+                          className="p-1 text-slate-300 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </td>
+
                     </tr>
                   );
                 })
@@ -521,7 +583,7 @@ export const RefundLedgerTable = () => {
                   <td className="py-3 px-3 text-right text-amber-700 font-black text-sm">
                     {formatCurrency(totalRefund)}
                   </td>
-                  <td colSpan="3" className="py-3 px-4 text-xs font-sans text-slate-700">
+                  <td colSpan="4" className="py-3 px-4 text-xs font-sans text-slate-700">
                     <div className="flex items-center gap-4">
                       <span>Đã nhận: <strong className="text-emerald-700 font-mono">{formatCurrency(totalConfirmed)}</strong></span>
                       <span>Còn phải thu: <strong className="text-amber-700 font-mono">{formatCurrency(totalPending)}</strong></span>

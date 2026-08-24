@@ -168,17 +168,37 @@ export const AppProvider = ({ children }) => {
     showNotification('Đã xóa tài khoản!', 'info');
   };
 
-  // Lọc theo tài khoản người mua
-  const accountOrders = useMemo(() => {
-    if (activeAccountId === 'ALL') return orders;
-    return orders.filter(o => o.accountId === activeAccountId);
-  }, [orders, activeAccountId]);
+  // Xóa một đơn hàng khỏi hệ thống
+  const deleteOrder = (orderId) => {
+    const updated = orders.filter(o => o.id !== orderId && o.orderCode !== orderId);
+    setOrders(updated);
+    storageService.saveOrders(updated);
+    showNotification('Đã xóa đơn hàng khỏi sổ!', 'info');
+  };
 
-  // SỔ ĐỐI SOÁT HOÀN TIỀN (Chỉ gồm các đơn Hủy và Trả hàng)
+  // Xóa nhiều đơn hàng
+  const batchDeleteOrders = (orderIds) => {
+    const set = new Set(orderIds);
+    const updated = orders.filter(o => !set.has(o.id) && !set.has(o.orderCode));
+    setOrders(updated);
+    storageService.saveOrders(updated);
+    showNotification(`Đã xóa ${orderIds.length} đơn hàng khỏi sổ!`, 'info');
+  };
+
+  // Đánh dấu đơn hủy chưa thanh toán (không cần hoàn tiền)
+  const markNoRefundNeeded = (orderId) => {
+    updateRefundField(orderId, { refundStatus: 'NO_REFUND_NEEDED' });
+    showNotification('Đã chuyển trạng thái: Chưa thanh toán (Không cần hoàn tiền)', 'info');
+  };
+
+  // SỔ ĐỐI SOÁT HOÀN TIỀN (Chỉ gồm các đơn Hủy và Trả hàng ĐÃ THANH TOÁN CẦN HOÀN)
   const refundLedgerEntries = useMemo(() => {
     return accountOrders.filter(o => {
       const isRefundOrCancel = o.status === 'CANCELLED' || o.status === 'REFUNDED' || o.status === 'REFUNDING';
       if (!isRefundOrCancel) return false;
+
+      // Loại bỏ các đơn đã đánh dấu là chưa thanh toán / không cần hoàn
+      if (o.refundStatus === 'NO_REFUND_NEEDED' || o.refundStatus === 'NOT_APPLICABLE') return false;
 
       // Lọc theo loại đơn
       if (orderTypeFilter === 'CANCELLED' && o.status !== 'CANCELLED') return false;
@@ -218,7 +238,8 @@ export const AppProvider = ({ children }) => {
   // Thống kê tài chính sổ cái
   const ledgerTotals = useMemo(() => {
     const allRefundEntries = accountOrders.filter(
-      o => o.status === 'CANCELLED' || o.status === 'REFUNDED' || o.status === 'REFUNDING'
+      o => (o.status === 'CANCELLED' || o.status === 'REFUNDED' || o.status === 'REFUNDING') &&
+           o.refundStatus !== 'NO_REFUND_NEEDED' && o.refundStatus !== 'NOT_APPLICABLE'
     );
 
     let totalRefundDue = 0; // Tổng số tiền hoàn
@@ -293,6 +314,9 @@ export const AppProvider = ({ children }) => {
         addAccount,
         updateAccount,
         deleteAccount,
+        deleteOrder,
+        batchDeleteOrders,
+        markNoRefundNeeded,
       }}
     >
       {children}

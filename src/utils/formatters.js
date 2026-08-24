@@ -78,6 +78,13 @@ export const getRefundStatusInfo = (status) => {
         icon: 'Hourglass',
         description: 'Đơn hàng đang trong quy trình xử lý hủy hoặc thẩm định trả hàng.',
       };
+    case 'NO_REFUND_NEEDED':
+      return {
+        label: 'Chưa thanh toán (Không cần hoàn)',
+        badgeClass: 'bg-slate-100 text-slate-500 border-slate-200',
+        icon: 'XCircle',
+        description: 'Đơn hủy khi chưa thanh toán, không phát sinh hoàn tiền.',
+      };
     case 'DISPUTED':
       return {
         label: 'Quá hạn / Cần khiếu nại',

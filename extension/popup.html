@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <title>Shopee Order Sync</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="header">
+    <div class="logo-box">🛍️</div>
+    <div class="header-info">
+      <h3>Shopee Order Sync</h3>
+      <p>Trích xuất đơn mua & hoàn tiền</p>
+    </div>
+  </div>
+
+  <div class="content">
+    <div id="status-card" class="status-card ready">
+      <span id="status-icon">⚡</span>
+      <span id="status-text">Sẵn sàng quét đơn hàng Shopee</span>
+    </div>
+
+    <div class="form-group">
+      <label for="limit-select">Số lượng đơn muốn quét:</label>
+      <select id="limit-select">
+        <option value="50">50 đơn gần nhất (Nhanh)</option>
+        <option value="100" selected>100 đơn gần nhất (Khuyên dùng)</option>
+        <option value="300">300 đơn gần nhất</option>
+        <option value="1000">Tất cả lịch sử (Có thể mất 1-2 phút)</option>
+      </select>
+    </div>
+
+    <!-- Progress Bar -->
+    <div id="progress-container" class="progress-container hidden">
+      <div class="progress-info">
+        <span id="progress-status">Đang tải đơn...</span>
+        <span id="progress-count">0 đơn</span>
+      </div>
+      <div class="progress-bar-bg">
+        <div id="progress-bar-fill" class="progress-bar-fill" style="width: 0%"></div>
+      </div>
+    </div>
+
+    <button id="btn-sync" class="btn-primary">
+      <span>🚀 Bắt đầu quét & Trích xuất</span>
+    </button>
+
+    <div id="result-actions" class="result-actions hidden">
+      <div class="success-banner">
+        🎉 Đã quét xong <strong id="total-scanned">0</strong> đơn hàng!
+      </div>
+      <button id="btn-download" class="btn-success">
+        📥 Tải file JSON về máy
+      </button>
+    </div>
+  </div>
+
+  <div class="footer">
+    <span>Bảo mật 100% • Dữ liệu xử lý cục bộ</span>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

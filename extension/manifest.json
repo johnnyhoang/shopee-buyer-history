@@ -1,0 +1,20 @@
+{
+  "manifest_version": 3,
+  "name": "Shopee Buyer History & Refund Sync",
+  "version": "1.0.0",
+  "description": "Tự động quét và trích xuất lịch sử đơn hàng, đối soát hoàn tiền Shopee an toàn",
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Shopee Order Sync"
+  },
+  "permissions": [
+    "cookies",
+    "storage",
+    "activeTab",
+    "scripting"
+  ],
+  "host_permissions": [
+    "https://shopee.vn/*",
+    "https://*.shopee.vn/*"
+  ]
+}

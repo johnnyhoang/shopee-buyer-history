@@ -36,9 +36,24 @@ module.exports = async function handler(req, res) {
       const code = ord.orderCode || ord.id;
       if (!code) continue;
 
+      // 🎯 LỌC CHỈ LƯU ĐƠN CẦN HOÀN TIỀN VÀO DATABASE:
+      // 1. Đơn Trả hàng / Hoàn tiền
+      const isReturnRefund = ord.status === 'REFUNDED' || 
+                             ord.status === 'REFUNDING' || 
+                             (ord.statusText || '').toLowerCase().includes('trả hàng') || 
+                             (ord.statusText || '').toLowerCase().includes('hoàn tiền');
+
+      // 2. Đơn Đã Hủy có phát sinh tiền hoàn (> 1.000đ)
+      const refundAmt = Number(ord.refundAmount || ord.totalAmount || 0);
+      const isCancelledPaid = (ord.status === 'CANCELLED' || (ord.statusText || '').toLowerCase().includes('hủy')) && refundAmt > 1000;
+
+      // Bỏ qua nếu là đơn đang giao, đơn hoàn thành thường, hoặc đơn hủy chưa thanh toán (0đ)
+      if (!isReturnRefund && !isCancelledPaid) {
+        continue;
+      }
+
       const finalId = ord.id || `ord_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
-      const isRefundOrCancel = ord.status === 'CANCELLED' || ord.status === 'REFUNDED' || ord.status === 'REFUNDING';
-      const defaultRefundStatus = isRefundOrCancel ? 'SHOPEE_REFUNDED' : 'NOT_APPLICABLE';
+      const defaultRefundStatus = 'SHOPEE_REFUNDED';
 
       const upsertQuery = `
         INSERT INTO sp_orders (
@@ -67,12 +82,12 @@ module.exports = async function handler(req, res) {
         String(code),
         ord.accountId || accountId || 'acc_main',
         ord.shopName || 'Shopee Shop',
-        ord.status || 'COMPLETED',
-        ord.statusText || 'Hoàn thành',
+        isReturnRefund ? 'REFUNDED' : 'CANCELLED',
+        ord.statusText || (isReturnRefund ? 'Trả hàng/Hoàn tiền' : 'Đã hủy'),
         ord.orderTime || new Date().toISOString(),
         ord.cancelTime || null,
         ord.totalAmount || 0,
-        ord.refundAmount || 0,
+        ord.refundAmount || ord.totalAmount || 0,
         ord.paymentMethod || 'SHOPEEPAY',
         ord.refundStatus || defaultRefundStatus,
         ord.refundConfirmedAt || null,

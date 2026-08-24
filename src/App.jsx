@@ -49,24 +49,24 @@ const MainLayout = () => {
         </div>
       )}
 
-      {/* Sub-Navigation Tabs */}
-      <div className="bg-white border-b border-slate-300">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex space-x-2 py-1.5 overflow-x-auto text-xs">
+      {/* Sub-Navigation Tabs - Compact */}
+      <div className="bg-white border-b border-slate-200">
+        <div className="max-w-7xl mx-auto px-2 sm:px-4">
+          <div className="flex space-x-1.5 py-1 overflow-x-auto text-[11px] no-scrollbar">
             
             {/* Tab 1: Sổ đối soát hoàn tiền (Mặc định) */}
             <button
               onClick={() => setActiveTab('refund-ledger')}
-              className={`flex items-center space-x-2 px-3.5 py-2 rounded-lg font-bold transition-all ${
+              className={`flex items-center space-x-1.5 px-2.5 py-1 rounded-md font-bold transition-all shrink-0 ${
                 activeTab === 'refund-ledger'
-                  ? 'bg-amber-500 text-slate-950 shadow-xs ring-1 ring-amber-600'
+                  ? 'bg-amber-500 text-slate-950 shadow-2xs'
                   : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
               }`}
             >
-              <RotateCcw className="w-3.5 h-3.5" />
-              <span>Sổ Đối Soát Hoàn Tiền (Đơn Trả & Hủy)</span>
+              <RotateCcw className="w-3 h-3" />
+              <span>Sổ Hoàn Tiền (Đơn Trả & Hủy)</span>
               {ledgerTotals.pendingCount > 0 && (
-                <span className="bg-slate-900 text-amber-400 text-[10px] font-mono font-black px-1.5 py-0.2 rounded">
+                <span className="bg-slate-900 text-amber-400 text-[10px] font-mono font-black px-1 rounded">
                   {ledgerTotals.pendingCount}
                 </span>
               )}
@@ -75,35 +75,35 @@ const MainLayout = () => {
             {/* Tab 2: Sổ tất cả đơn mua */}
             <button
               onClick={() => setActiveTab('all-ledger')}
-              className={`flex items-center space-x-2 px-3.5 py-2 rounded-lg font-bold transition-all ${
+              className={`flex items-center space-x-1.5 px-2.5 py-1 rounded-md font-bold transition-all shrink-0 ${
                 activeTab === 'all-ledger'
-                  ? 'bg-slate-900 text-white shadow-xs'
+                  ? 'bg-slate-900 text-white shadow-2xs'
                   : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
               }`}
             >
-              <Layers className="w-3.5 h-3.5" />
-              <span>Sổ Nhật Ký Toàn Bộ Đơn Mua</span>
+              <Layers className="w-3 h-3" />
+              <span>Nhật Ký Tất Cả Đơn</span>
             </button>
 
             {/* Tab 3: Hướng dẫn quét đơn Shopee */}
             <button
               onClick={() => setActiveTab('sync-guide')}
-              className={`flex items-center space-x-2 px-3.5 py-2 rounded-lg font-bold transition-all ${
+              className={`flex items-center space-x-1.5 px-2.5 py-1 rounded-md font-bold transition-all shrink-0 ${
                 activeTab === 'sync-guide'
-                  ? 'bg-slate-900 text-white shadow-xs'
+                  ? 'bg-slate-900 text-white shadow-2xs'
                   : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
               }`}
             >
-              <Puzzle className="w-3.5 h-3.5" />
-              <span>Tiện Ích Tự Động Quét Shopee</span>
+              <Puzzle className="w-3 h-3" />
+              <span>Tiện Ích Quét</span>
             </button>
 
           </div>
         </div>
       </div>
 
-      {/* Main Table Content */}
-      <main className="max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-5 flex-1">
+      {/* Main Table Content - Compact */}
+      <main className="max-w-7xl w-full mx-auto px-2 sm:px-4 py-2.5 flex-1">
         {activeTab === 'refund-ledger' && <RefundLedgerTable />}
         {activeTab === 'all-ledger' && <FullHistoryLedgerTable />}
         {activeTab === 'sync-guide' && <ExtensionGuideView />}

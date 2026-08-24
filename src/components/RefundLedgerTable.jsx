@@ -21,6 +21,8 @@ import {
 export const RefundLedgerTable = () => {
   const { 
     refundLedgerEntries, 
+    accountOrders,
+    setActiveTab,
     accounts, 
     searchQuery, 
     setSearchQuery,
@@ -258,8 +260,29 @@ export const RefundLedgerTable = () => {
             <tbody className="divide-y divide-slate-200">
               {refundLedgerEntries.length === 0 ? (
                 <tr>
-                  <td colSpan="12" className="py-12 text-center text-slate-400 font-medium">
-                    Không có bản ghi đối soát nào phù hợp với bộ lọc hiện tại.
+                  <td colSpan="12" className="py-12 text-center">
+                    <div className="max-w-md mx-auto space-y-2">
+                      <div className="text-slate-800 font-bold text-sm">
+                        Chưa có đơn Hủy hoặc Trả hàng nào cần đối soát.
+                      </div>
+                      {accountOrders.length > 0 ? (
+                        <div className="bg-amber-50 p-4 rounded-xl border border-amber-200 space-y-2">
+                          <p className="text-xs text-amber-900 font-medium">
+                            Bạn vừa nạp <strong>{accountOrders.length}</strong> đơn hàng thành công (không có đơn hủy/trả hàng).
+                          </p>
+                          <button
+                            onClick={() => setActiveTab('all-ledger')}
+                            className="bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold px-4 py-2 rounded-lg shadow-xs inline-flex items-center gap-1.5 transition-all"
+                          >
+                            <span>👉 Chuyển sang Sổ Nhật Ký Toàn Bộ Đơn Mua ({accountOrders.length} đơn)</span>
+                          </button>
+                        </div>
+                      ) : (
+                        <p className="text-xs text-slate-500">
+                          Hãy bấm nút <strong>"Đồng bộ / Nhập đơn"</strong> ở góc trên bên phải để nạp file đơn hàng của bạn.
+                        </p>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ) : (

@@ -191,6 +191,12 @@ export const AppProvider = ({ children }) => {
     showNotification('Đã chuyển trạng thái: Chưa thanh toán (Không cần hoàn tiền)', 'info');
   };
 
+  // Lọc theo tài khoản người mua
+  const accountOrders = useMemo(() => {
+    if (activeAccountId === 'ALL') return orders;
+    return orders.filter(o => o.accountId === activeAccountId);
+  }, [orders, activeAccountId]);
+
   // SỔ ĐỐI SOÁT HOÀN TIỀN (Chỉ gồm các đơn Hủy và Trả hàng ĐÃ THANH TOÁN CẦN HOÀN)
   const refundLedgerEntries = useMemo(() => {
     return accountOrders.filter(o => {

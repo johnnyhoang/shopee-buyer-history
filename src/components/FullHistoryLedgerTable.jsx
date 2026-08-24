@@ -45,12 +45,24 @@ export const FullHistoryLedgerTable = () => {
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3 sm:space-y-4">
       
       {/* Search & Status filter */}
-      <div className="bg-white p-3.5 rounded-xl border border-slate-300 shadow-xs flex flex-wrap items-center justify-between gap-3 text-xs">
-        <div className="flex flex-wrap items-center gap-1.5">
-          <span className="text-slate-500 font-semibold mr-1">Trạng thái:</span>
+      <div className="bg-white p-3 sm:p-3.5 rounded-xl border border-slate-300 shadow-xs space-y-2.5">
+        
+        <div className="relative w-full">
+          <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Tìm theo sản phẩm, shop, mã đơn..."
+            className="w-full pl-9 pr-3 py-2 text-xs bg-slate-50 border border-slate-300 rounded-lg focus:bg-white focus:outline-none focus:ring-1 focus:ring-slate-900"
+          />
+        </div>
+
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs no-scrollbar">
+          <span className="text-slate-500 font-semibold mr-1 shrink-0">Trạng thái:</span>
           {[
             { key: 'ALL', label: 'Tất cả đơn' },
             { key: 'COMPLETED', label: 'Hoàn thành' },
@@ -61,7 +73,7 @@ export const FullHistoryLedgerTable = () => {
             <button
               key={item.key}
               onClick={() => setStatusFilter(item.key)}
-              className={`px-2.5 py-1 rounded font-bold transition-all ${
+              className={`px-2.5 py-1 rounded-lg font-bold transition-all shrink-0 ${
                 statusFilter === item.key ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
               }`}
             >
@@ -69,21 +81,58 @@ export const FullHistoryLedgerTable = () => {
             </button>
           ))}
         </div>
-
-        <div className="relative min-w-[240px]">
-          <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Tìm theo sản phẩm, shop, mã đơn..."
-            className="w-full pl-8 pr-3 py-1.5 text-xs bg-slate-50 border border-slate-300 rounded-lg focus:bg-white focus:outline-none focus:ring-1 focus:ring-slate-900"
-          />
-        </div>
       </div>
 
-      {/* Accounting Table for All Orders */}
-      <div className="bg-white rounded-xl border border-slate-300 shadow-xs overflow-hidden">
+      {/* 📱 MOBILE CARD VIEW */}
+      <div className="block md:hidden space-y-3">
+        {displayedOrders.length === 0 ? (
+          <div className="bg-white rounded-xl border border-slate-300 p-8 text-center text-xs text-slate-400">
+            Không tìm thấy đơn hàng nào.
+          </div>
+        ) : (
+          displayedOrders.map((order, idx) => {
+            const badge = getStatusBadge(order.status);
+            const firstItem = order.items?.[0];
+            const otherCount = (order.items?.length || 1) - 1;
+
+            return (
+              <div key={order.id} className="bg-white rounded-2xl border border-slate-300 p-3.5 space-y-2.5 shadow-xs">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-slate-400 text-xs font-bold">#{idx + 1}</span>
+                    <span className="font-mono font-bold text-slate-800 text-xs">#{order.orderCode}</span>
+                  </div>
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${badge.color}`}>
+                    {badge.label}
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between text-[11px] text-slate-500">
+                  <span className="font-semibold text-slate-800">🏪 {order.shopName}</span>
+                  <span className="font-mono">{formatDate(order.orderTime)}</span>
+                </div>
+
+                <div className="text-xs font-semibold text-slate-900 line-clamp-2">
+                  {firstItem?.name || 'Đơn hàng Shopee'}
+                  {otherCount > 0 && <span className="text-slate-400 font-normal ml-1">(+{otherCount} món)</span>}
+                </div>
+
+                <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200 flex items-center justify-between">
+                  <div className="text-[11px] text-slate-500 font-medium">
+                    💳 {order.paymentMethod || 'ShopeePay / Thẻ'}
+                  </div>
+                  <div className="font-mono text-sm font-black text-slate-900">
+                    {formatCurrency(order.totalAmount)}
+                  </div>
+                </div>
+              </div>
+            );
+          })
+        )}
+      </div>
+
+      {/* 💻 DESKTOP TABLE VIEW */}
+      <div className="hidden md:block bg-white rounded-xl border border-slate-300 shadow-xs overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs border-collapse font-sans">
             <thead className="bg-slate-900 text-slate-100 font-mono text-[11px] uppercase tracking-wider border-b border-slate-800">
@@ -114,42 +163,23 @@ export const FullHistoryLedgerTable = () => {
 
                   return (
                     <tr key={order.id} className="hover:bg-slate-50 font-medium">
-                      <td className="py-2.5 px-3 text-center text-slate-400 font-mono text-[11px]">
-                        {idx + 1}
-                      </td>
-                      <td className="py-2.5 px-3 font-mono text-[11px] text-slate-700 whitespace-nowrap">
-                        {formatDate(order.orderTime)}
-                      </td>
+                      <td className="py-2.5 px-3 text-center text-slate-400 font-mono text-[11px]">{idx + 1}</td>
+                      <td className="py-2.5 px-3 font-mono text-[11px] text-slate-700 whitespace-nowrap">{formatDate(order.orderTime)}</td>
                       <td className="py-2.5 px-3">
                         <span className="font-bold text-slate-800 bg-slate-100 px-2 py-0.5 rounded border border-slate-200 text-[11px]">
                           👤 {getAccountName(order.accountId)}
                         </span>
                       </td>
-                      <td className="py-2.5 px-3 font-mono text-slate-600 text-[11px]">
-                        #{order.orderCode}
-                      </td>
+                      <td className="py-2.5 px-3 font-mono text-slate-600 text-[11px]">#{order.orderCode}</td>
                       <td className="py-2.5 px-3">
-                        <div className="text-slate-900 font-semibold line-clamp-1">
-                          {firstItem?.name || 'Đơn hàng Shopee'}
-                          {otherCount > 0 && (
-                            <span className="text-slate-400 font-normal ml-1">(+{otherCount} món)</span>
-                          )}
-                        </div>
-                        <div className="text-[11px] text-slate-500 mt-0.5">
-                          🏪 {order.shopName}
-                        </div>
+                        <div className="text-slate-900 font-semibold line-clamp-1">{firstItem?.name || 'Đơn hàng Shopee'}</div>
+                        <div className="text-[11px] text-slate-500 mt-0.5">🏪 {order.shopName}</div>
                       </td>
                       <td className="py-2.5 px-3 text-center">
-                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${badge.color}`}>
-                          {badge.label}
-                        </span>
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${badge.color}`}>{badge.label}</span>
                       </td>
-                      <td className="py-2.5 px-3 text-right font-mono font-bold text-slate-900 whitespace-nowrap">
-                        {formatCurrency(order.totalAmount)}
-                      </td>
-                      <td className="py-2.5 px-3 text-[11px] text-slate-600 whitespace-nowrap">
-                        {order.paymentMethod || 'Chưa rõ'}
-                      </td>
+                      <td className="py-2.5 px-3 text-right font-mono font-bold text-slate-900 whitespace-nowrap">{formatCurrency(order.totalAmount)}</td>
+                      <td className="py-2.5 px-3 text-[11px] text-slate-600 whitespace-nowrap">{order.paymentMethod || 'Chưa rõ'}</td>
                     </tr>
                   );
                 })
@@ -159,12 +189,8 @@ export const FullHistoryLedgerTable = () => {
             {filteredOrders.length > 0 && (
               <tfoot className="bg-slate-100 border-t-2 border-slate-300 font-mono text-xs font-bold text-slate-900">
                 <tr>
-                  <td colSpan="6" className="py-3 px-4 text-right uppercase tracking-wider text-slate-600">
-                    Tổng chi tiêu ({filteredOrders.length} đơn):
-                  </td>
-                  <td className="py-3 px-3 text-right text-slate-900 font-black text-sm">
-                    {formatCurrency(totalSpent)}
-                  </td>
+                  <td colSpan="6" className="py-3 px-4 text-right uppercase tracking-wider text-slate-600">Tổng chi tiêu ({filteredOrders.length} đơn):</td>
+                  <td className="py-3 px-3 text-right text-slate-900 font-black text-sm">{formatCurrency(totalSpent)}</td>
                   <td></td>
                 </tr>
               </tfoot>
@@ -175,7 +201,7 @@ export const FullHistoryLedgerTable = () => {
 
       {/* Pagination / Load More Bar */}
       {filteredOrders.length > 0 && (
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-white p-3.5 rounded-xl border border-slate-300 text-xs">
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-white p-3 sm:p-3.5 rounded-xl border border-slate-300 text-xs">
           <span className="text-slate-600 font-medium">
             Đang hiển thị <strong>{displayedOrders.length}</strong> / <strong>{filteredOrders.length}</strong> đơn hàng
           </span>
@@ -183,13 +209,13 @@ export const FullHistoryLedgerTable = () => {
           {hasMore ? (
             <button
               onClick={handleLoadMore}
-              className="bg-slate-900 hover:bg-slate-800 text-white font-bold px-4 py-2 rounded-lg shadow-xs flex items-center gap-1.5 transition-all hover:scale-[1.01]"
+              className="w-full sm:w-auto bg-slate-900 hover:bg-slate-800 text-white font-bold py-2.5 px-4 rounded-xl shadow-xs flex items-center justify-center gap-1.5 transition-all"
             >
               <ArrowDownCircle className="w-4 h-4 text-amber-400" />
-              <span>Tải thêm 50 đơn tiếp theo (còn {filteredOrders.length - visibleCount} đơn)</span>
+              <span>Tải thêm 50 đơn (còn {filteredOrders.length - visibleCount})</span>
             </button>
           ) : (
-            <span className="text-slate-400 font-semibold italic">
+            <span className="text-slate-400 font-semibold italic text-center">
               Đã hiển thị toàn bộ danh sách đơn hàng
             </span>
           )}

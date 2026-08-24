@@ -167,13 +167,14 @@ export const RefundLedgerTable = () => {
             value={paymentMethodFilter}
             onChange={(e) => setPaymentMethodFilter(e.target.value)}
             aria-label="Lọc theo phương thức thanh toán hoàn tiền"
-            className="bg-slate-100 text-slate-800 font-semibold p-1.5 rounded-lg border border-slate-300 focus:outline-none"
+            className="bg-slate-100 text-slate-800 font-semibold p-1.5 rounded-lg border border-slate-300 focus:outline-none cursor-pointer"
           >
-            <option value="ALL">💳 Mọi phương thức hoàn tiền</option>
-            <option value="thẻ">💳 Thẻ tín dụng / Ghi nợ</option>
-            <option value="shopeepay">👛 Ví ShopeePay</option>
-            <option value="ngân hàng">🏦 Tài khoản Ngân hàng / ATM</option>
-            <option value="cod">📦 COD</option>
+            <option value="ALL">💳 Mọi phương thức hoàn</option>
+            <option value="CARD">💳 Thẻ tín dụng / Ghi nợ</option>
+            <option value="SHOPEEPAY">👛 Ví ShopeePay</option>
+            <option value="BANK">🏦 Tài khoản Ngân hàng / ATM</option>
+            <option value="SPAYLATER">⚡ SPayLater</option>
+            <option value="COD">📦 Tiền mặt (COD)</option>
           </select>
 
         </div>
@@ -390,10 +391,31 @@ export const RefundLedgerTable = () => {
                       </td>
 
                       {/* Phương thức hoàn */}
-                      <td className="py-2.5 px-3 text-[11px] text-slate-700 whitespace-nowrap">
-                        <span className="bg-slate-100 px-2 py-1 rounded border border-slate-200 font-medium inline-block max-w-[140px] truncate" title={order.paymentMethod}>
-                          {order.paymentMethod || 'Chưa rõ'}
-                        </span>
+                      <td className="py-2.5 px-3 text-[11px] whitespace-nowrap">
+                        <select
+                          value={
+                            (order.paymentMethod || '').toLowerCase().includes('thẻ') || (order.paymentMethod || '').toLowerCase().includes('visa') || (order.paymentMethod || '').toLowerCase().includes('credit')
+                              ? 'Thẻ tín dụng / Ghi nợ'
+                              : (order.paymentMethod || '').toLowerCase().includes('shopeepay') || (order.paymentMethod || '').toLowerCase().includes('ví')
+                              ? 'Ví ShopeePay'
+                              : (order.paymentMethod || '').toLowerCase().includes('ngân hàng') || (order.paymentMethod || '').toLowerCase().includes('atm') || (order.paymentMethod || '').toLowerCase().includes('chuyển khoản')
+                              ? 'Tài khoản Ngân hàng'
+                              : (order.paymentMethod || '').toLowerCase().includes('spaylater')
+                              ? 'SPayLater'
+                              : (order.paymentMethod || '').toLowerCase().includes('cod')
+                              ? 'COD (Tiền mặt)'
+                              : order.paymentMethod || 'Ví ShopeePay'
+                          }
+                          onChange={(e) => updateRefundField(order.id, { paymentMethod: e.target.value })}
+                          className="bg-slate-100 hover:bg-white text-slate-800 text-[11px] font-semibold py-1 px-2 rounded border border-slate-200 focus:outline-none focus:ring-1 focus:ring-slate-900 cursor-pointer max-w-[140px] truncate"
+                          title="Bấm để đổi phương thức hoàn tiền"
+                        >
+                          <option value="Ví ShopeePay">👛 Ví ShopeePay</option>
+                          <option value="Thẻ tín dụng / Ghi nợ">💳 Thẻ tín dụng / Ghi nợ</option>
+                          <option value="Tài khoản Ngân hàng">🏦 Tài khoản Ngân hàng</option>
+                          <option value="SPayLater">⚡ SPayLater</option>
+                          <option value="COD (Tiền mặt)">📦 COD (Tiền mặt)</option>
+                        </select>
                       </td>
 
                       {/* Đối soát nhận tiền (1-Click Toggle) */}

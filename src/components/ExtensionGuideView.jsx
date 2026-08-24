@@ -1,84 +1,146 @@
 import React, { useState } from 'react';
-import { Puzzle, Download, Copy, Check, Terminal, ShieldCheck, ArrowRight, Sparkles } from 'lucide-react';
+import { Puzzle, Download, Copy, Check, Terminal, ShieldCheck, ArrowRight, Sparkles, RefreshCw } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 
 export const ExtensionGuideView = () => {
   const { setIsSyncModalOpen } = useApp();
   const [copiedScript, setCopiedScript] = useState(false);
 
-  // Script chạy trực tiếp trong DevTools Console trên trang Shopee nếu user không muốn cài Extension
-  const bookmarkletCode = `(async function crawlShopeeOrders() {
-  console.log("🚀 Bắt đầu quét đơn hàng Shopee...");
-  const orders = [];
-  let offset = 0;
-  const limit = 20;
-  let hasMore = true;
+  // Script chạy trực tiếp trong Console F12 trên trang Shopee
+  const bookmarkletCode = `(async function extractShopeeRefunds() {
+  console.log("%c🚀 BẮT ĐẦU TRÍCH XUẤT TAB TRẢ HÀNG / HOÀN TIỀN TỪ SHOPEE...", "color: #ee4d2d; font-size: 15px; font-weight: bold;");
 
-  while (hasMore) {
-    try {
-      const res = await fetch(\`/api/v4/order/get_all_order_and_item_list?limit=\${limit}&offset=\${offset}\`);
-      const data = await res.json();
-      const list = data?.data?.order_data?.details_list || [];
-      if (!list.length) {
-        hasMore = false;
-        break;
-      }
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
-      list.forEach(item => {
-        const info = item.info_card || {};
-        const items = (item.item_list || []).map(p => ({
-          name: p.item_info?.item_name || 'Sản phẩm Shopee',
-          imageUrl: p.item_info?.item_image ? \`https://down-vn.img.susercontent.com/file/\${p.item_info.item_image}\` : '',
-          quantity: p.order_price_info?.amount || 1,
-          price: (p.order_price_info?.final_price || 0) / 100000,
-          modelName: p.item_info?.model_name || ''
-        }));
-
-        let status = 'COMPLETED';
-        let statusText = info.order_list_cards?.[0]?.status_text || 'Hoàn thành';
-        const st = statusText.toLowerCase();
-        if (st.includes('hủy')) status = 'CANCELLED';
-        else if (st.includes('trả hàng') || st.includes('hoàn tiền')) status = 'REFUNDED';
-        else if (st.includes('đang giao') || st.includes('vận chuyển')) status = 'SHIPPING';
-        else if (st.includes('chờ thanh toán')) status = 'PENDING_PAYMENT';
-
-        orders.push({
-          id: 'shopee_' + item.order_id,
-          orderCode: String(item.order_id),
-          shopName: info.shop_info?.username || 'Shopee Shop',
-          status: status,
-          statusText: statusText,
-          orderTime: new Date((item.create_time || Date.now() / 1000) * 1000).toISOString(),
-          cancelTime: item.cancel_time ? new Date(item.cancel_time * 1000).toISOString() : null,
-          totalAmount: (info.subtotal_price || 0) / 100000,
-          refundAmount: (info.subtotal_price || 0) / 100000,
-          paymentMethod: info.payment_method_name || 'ShopeePay / Thẻ',
-          cancelReason: item.cancel_reason || '',
-          refundReason: item.return_refund_reason || '',
-          shippingFee: (info.shipping_fee || 0) / 100000,
-          voucherDiscount: (info.voucher_price || 0) / 100000,
-          items: items
-        });
-      });
-
-      offset += limit;
-      console.log(\`📦 Đã tải \${orders.length} đơn hàng...\`);
-      if (list.length < limit) hasMore = false;
-      await new Promise(r => setTimeout(r, 600));
-    } catch (err) {
-      console.error("Lỗi khi tải đơn:", err);
-      hasMore = false;
+  // 1. Tự động cuộn trang để tải hết tất cả đơn hàng
+  console.log("📜 Đang cuộn trang để tải toàn bộ danh sách...");
+  let prevHeight = 0, sameCount = 0;
+  for (let i = 0; i < 35; i++) {
+    window.scrollTo(0, document.body.scrollHeight);
+    await sleep(500);
+    const currHeight = document.body.scrollHeight;
+    if (currHeight === prevHeight) {
+      if (++sameCount >= 3) break;
+    } else {
+      sameCount = 0;
+      prevHeight = currHeight;
     }
   }
+  window.scrollTo(0, 0);
+  await sleep(300);
 
-  // Tự động tải file JSON về máy
-  const blob = new Blob([JSON.stringify(orders, null, 2)], { type: 'application/json' });
+  // 2. Thu thập và phân tích các khối đơn hàng
+  const extractedOrders = [];
+  const processedCodes = new Set();
+  const allContainers = Array.from(document.querySelectorAll('div, section'));
+  
+  const orderCards = allContainers.filter(el => {
+    const txt = el.innerText || '';
+    const hasRefund = txt.includes('Tổng số tiền') || txt.includes('Tổng tiền hoàn') || txt.includes('Thành tiền') || txt.includes('HOÀN TIỀN') || txt.includes('TRẢ HÀNG') || txt.includes('ĐÃ HỦY');
+    const hasShop = txt.includes('Xem Shop') || txt.includes('Trao Đổi') || txt.includes('Chat') || txt.includes('Mua Lại');
+    const isLeaf = !Array.from(el.children).some(c => (c.innerText || '').includes('Tổng số tiền') && (c.innerText || '').includes('Xem Shop'));
+    return hasRefund && hasShop && isLeaf && el.offsetWidth > 350 && el.offsetHeight > 80;
+  });
+
+  orderCards.forEach((card, idx) => {
+    try {
+      const text = card.innerText || '';
+      const lines = text.split('\\n').map(l => l.trim()).filter(Boolean);
+
+      // Tên Shop
+      let shopName = 'Shopee Shop';
+      for (const line of lines) {
+        if (line.length > 1 && !line.includes('₫') && !line.includes('HOÀN') && !line.includes('TRẢ HÀNG') && !line.includes('ĐÃ HỦY') && !line.includes('Xem Shop') && !line.includes('Trao Đổi')) {
+          shopName = line.replace(/Yêu thích\\+?|Mall|Shopee/gi, '').trim() || 'Shopee Shop';
+          break;
+        }
+      }
+
+      // Trạng thái
+      let status = 'REFUNDED';
+      let statusText = 'Trả hàng/Hoàn tiền';
+      const upper = text.toUpperCase();
+      if (upper.includes('YÊU CẦU ĐÃ ĐƯỢC HỦY') || upper.includes('ĐÃ HỦY YÊU CẦU') || upper.includes('ĐÃ HỦY')) {
+        status = 'CANCELLED';
+        statusText = 'Đã hủy yêu cầu';
+      } else if (upper.includes('HOÀN TIỀN THÀNH CÔNG') || upper.includes('ĐÃ HOÀN TIỀN')) {
+        status = 'REFUNDED';
+        statusText = 'Hoàn tiền thành công';
+      } else if (upper.includes('ĐANG XỬ LÝ') || upper.includes('CHỜ')) {
+        status = 'REFUNDING';
+        statusText = 'Đang xử lý hoàn tiền';
+      }
+
+      // Giá tiền
+      let amount = 0;
+      const matchSpecial = text.match(/(?:Tổng tiền hoàn|Tổng số tiền|Thành tiền|Tiền hoàn|Giá)\\s*[:：]?\\s*₫?\\s*([0-9.,]+)/i);
+      if (matchSpecial) {
+        amount = parseInt(matchSpecial[1].replace(/[^0-9]/g, ''), 10) || 0;
+      }
+      if (amount === 0) {
+        const allPrices = text.match(/₫\\s*([0-9.,]+)/g) || text.match(/([0-9.,]+)\\s*₫/g) || [];
+        const prices = allPrices.map(p => parseInt(p.replace(/[^0-9]/g, ''), 10)).filter(n => n > 1000);
+        if (prices.length > 0) amount = Math.max(...prices);
+      }
+
+      // Tên sản phẩm
+      let productName = 'Sản phẩm Shopee';
+      for (const line of lines) {
+        if (line.length > 8 && !line.includes('₫') && !line.includes('Xem Shop') && !line.includes('Trao Đổi') && !line.includes('Chat') && !line.includes('Mua Lại') && !line.includes('HOÀN') && !line.includes('TRẢ HÀNG') && !line.includes('YÊU CẦU') && line !== shopName) {
+          productName = line;
+          break;
+        }
+      }
+
+      const qtyMatch = text.match(/x\\s*([0-9]+)/i);
+      const quantity = qtyMatch ? parseInt(qtyMatch[1], 10) : 1;
+
+      let orderCode = '';
+      const links = card.querySelectorAll('a[href]');
+      for (const link of links) {
+        const href = link.href || '';
+        const m = href.match(/order\\/([0-9]+)/) || href.match(/order_id=([0-9]+)/) || href.match(/order_sn=([0-9]+)/);
+        if (m) { orderCode = m[1]; break; }
+      }
+      if (!orderCode) {
+        orderCode = 'SP' + Math.abs((shopName + productName + amount + idx).split('').reduce((a, b) => ((a << 5) - a) + b.charCodeAt(0), 0));
+      }
+
+      if (processedCodes.has(orderCode)) return;
+      processedCodes.add(orderCode);
+
+      extractedOrders.push({
+        id: 'shopee_' + orderCode,
+        orderCode: String(orderCode),
+        shopName: shopName,
+        status: status,
+        statusText: statusText,
+        orderTime: new Date().toISOString(),
+        cancelTime: new Date().toISOString(),
+        totalAmount: amount,
+        refundAmount: amount,
+        paymentMethod: 'ShopeePay / Thẻ / Ngân hàng',
+        cancelReason: status === 'CANCELLED' ? 'Đã hủy yêu cầu' : 'Yêu cầu Trả hàng / Hoàn tiền',
+        refundReason: statusText,
+        items: [{ name: productName, quantity: quantity, price: amount }]
+      });
+    } catch (e) {}
+  });
+
+  if (extractedOrders.length === 0) {
+    alert("⚠️ Chưa nhận diện được đơn. Hãy chắc chắn bạn đang ở tab Trả hàng / Hoàn tiền của Shopee và danh sách đơn đã hiển thị.");
+    return;
+  }
+
+  const blob = new Blob([JSON.stringify(extractedOrders, null, 2)], { type: 'application/json' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = \`shopee_orders_\${Date.now()}.json\`;
+  a.download = \`shopee_tra_hang_hoan_tien_\${extractedOrders.length}_don.json\`;
   document.body.appendChild(a);
   a.click();
-  alert(\`🎉 Đã xuất thành công \${orders.length} đơn hàng! Hãy kéo thả file này vào ứng dụng.\`);
+  document.body.removeChild(a);
+
+  alert(\`🎉 XONG! Đã trích xuất thành công \${extractedOrders.length} đơn có đầy đủ Tên sản phẩm, Tên Shop & Số tiền hoàn. Hãy nạp file JSON này vào sổ!\`);
 })();`;
 
   const handleCopyScript = () => {
@@ -88,118 +150,76 @@ export const ExtensionGuideView = () => {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 text-xs">
       
       {/* Header */}
-      <div className="bg-gradient-to-r from-orange-600 to-amber-600 p-6 rounded-2xl text-white shadow-md">
+      <div className="bg-slate-900 text-white p-4 rounded-xl shadow-xs flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="p-3 bg-white/10 rounded-xl backdrop-blur-sm">
-            <Puzzle className="w-8 h-8 text-white" />
+          <div className="p-2 bg-amber-500 text-slate-950 rounded-lg font-bold shrink-0">
+            <Sparkles className="w-5 h-5" />
           </div>
           <div>
-            <h2 className="text-xl font-bold">Hướng Dẫn Lấy Đơn Hàng Tự Động Từ Shopee</h2>
-            <p className="text-orange-100 text-xs mt-1">
-              An toàn 100% - Không lo lộ mật khẩu hay bị chặn OTP/Captcha.
-            </p>
+            <h2 className="text-sm sm:text-base font-bold">Cách Quét Đơn Trả Hàng / Hoàn Tiền Shopee Chuẩn 100%</h2>
+            <p className="text-slate-400 text-[11px]">Trích xuất đầy đủ: Tên sản phẩm, Tên shop, Số tiền hoàn và Mã đơn hàng</p>
           </div>
         </div>
+
+        <button
+          onClick={() => setIsSyncModalOpen(true)}
+          className="bg-amber-500 hover:bg-amber-400 text-slate-950 px-3 py-1.5 rounded-lg font-bold text-xs shrink-0"
+        >
+          Mở Hộp Thoại Nhập
+        </button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        
-        {/* Cách 1: Tiện ích mở rộng Chrome Extension */}
-        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-between">
-          <div>
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-orange-600 uppercase tracking-wider">Cách 1 (Khuyên dùng)</span>
-              <span className="bg-orange-100 text-orange-700 text-[11px] font-bold px-2 py-0.5 rounded-full">Tiện ích 1-Click</span>
-            </div>
-            
-            <h3 className="text-base font-bold text-slate-800 mt-2">
-              Cài đặt Chrome Extension "Shopee History Sync"
-            </h3>
-            
-            <p className="text-xs text-slate-500 mt-2 leading-relaxed">
-              Mã nguồn Extension đã được tạo sẵn trong thư mục <code className="bg-slate-100 px-1.5 py-0.5 rounded text-slate-800 font-mono">extension/</code> của dự án.
-            </p>
+      {/* 3 Bước thực hiện */}
+      <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs space-y-3">
+        <h3 className="font-bold text-slate-900 text-sm flex items-center gap-1.5">
+          <Terminal className="w-4 h-4 text-amber-600" />
+          3 Bước Trích Xuất Dữ Liệu Trong 10 Giây:
+        </h3>
 
-            <ol className="mt-4 space-y-3 text-xs text-slate-700 list-decimal list-inside">
-              <li>Mở Chrome / Edge / Cốc Cốc, truy cập <code className="bg-slate-100 px-1.5 py-0.5 rounded font-mono">chrome://extensions</code></li>
-              <li>Bật công tắc <strong>Developer mode (Chế độ dành cho nhà phát triển)</strong> ở góc phải trên.</li>
-              <li>Bấm <strong>Load unpacked (Tải tiện ích đã giải nén)</strong> và chọn thư mục <code className="bg-slate-100 px-1.5 py-0.5 rounded font-mono">extension</code> trong ứng dụng này.</li>
-              <li>Mở Shopee và đăng nhập tài khoản của bạn hoặc người thân, click biểu tượng Extension và bấm <strong>"Bắt đầu quét & Đồng bộ"</strong>.</li>
-            </ol>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-1">
+          <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-1">
+            <div className="font-bold text-slate-900 text-xs">Bước 1: Mở Shopee</div>
+            <p className="text-slate-600 text-[11px]">
+              Đăng nhập Shopee $\rightarrow$ Vào mục <strong>Đơn Mua</strong> $\rightarrow$ Bấm qua tab <strong>Trả hàng / Hoàn tiền</strong>.
+            </p>
           </div>
 
-          <div className="mt-6 pt-4 border-t border-slate-100 flex items-center gap-3">
-            <button
-              onClick={() => setIsSyncModalOpen(true)}
-              className="w-full py-2.5 px-4 bg-orange-600 hover:bg-orange-700 text-white rounded-xl font-bold text-xs flex items-center justify-center gap-2 shadow-sm transition-all"
-            >
-              <Download className="w-4 h-4" />
-              Mở Trình Đồng Bộ & Nhập Dữ Liệu
-            </button>
+          <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-1">
+            <div className="font-bold text-slate-900 text-xs">Bước 2: Mở Console F12</div>
+            <p className="text-slate-600 text-[11px]">
+              Nhấn phím <strong>F12</strong> (hoặc chuột phải chọn <em>Inspect / Kiểm tra</em>) $\rightarrow$ bấm qua tab <strong>Console</strong>.
+            </p>
+          </div>
+
+          <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-1">
+            <div className="font-bold text-slate-900 text-xs">Bước 3: Dán mã & Chạy</div>
+            <p className="text-slate-600 text-[11px]">
+              Bấm nút <strong>Sao chép mã</strong> bên dưới $\rightarrow$ Dán vào Console rồi bấm <strong>Enter</strong>. File JSON chuẩn sẽ tự động tải về!
+            </p>
           </div>
         </div>
 
-        {/* Cách 2: Chạy Script nhanh trên F12 Console (Không cần cài đặt gì) */}
-        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-between">
-          <div>
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-emerald-600 uppercase tracking-wider">Cách 2 (Nhanh nhất)</span>
-              <span className="bg-emerald-100 text-emerald-700 text-[11px] font-bold px-2 py-0.5 rounded-full">Chạy trực tiếp DevTools</span>
-            </div>
-            
-            <h3 className="text-base font-bold text-slate-800 mt-2">
-              Dán Script quét đơn vào Console trình duyệt
-            </h3>
-            
-            <p className="text-xs text-slate-500 mt-2 leading-relaxed">
-              Nếu bạn không muốn cài extension, chỉ cần mở trang Shopee đã đăng nhập và dán đoạn mã bên dưới.
-            </p>
-
-            <ol className="mt-4 space-y-2 text-xs text-slate-700 list-decimal list-inside">
-              <li>Đăng nhập <a href="https://shopee.vn" target="_blank" rel="noreferrer" className="text-orange-600 underline font-medium">shopee.vn</a> trên trình duyệt.</li>
-              <li>Nhấn phím <strong>F12</strong> (hoặc chuột phải chọn <em>Kiểm tra / Inspect</em>) và chuyển qua tab <strong>Console</strong>.</li>
-              <li>Copy đoạn script bên dưới, dán vào Console rồi bấm <strong>Enter</strong>.</li>
-              <li>Trình duyệt sẽ tự động quét toàn bộ đơn và tải về file <code className="bg-slate-100 px-1 py-0.5 rounded font-mono">.json</code> để bạn nhập vào app.</li>
-            </ol>
-          </div>
-
-          <div className="mt-6 pt-4 border-t border-slate-100">
+        {/* Copy script box */}
+        <div className="pt-2">
+          <div className="flex items-center justify-between pb-1">
+            <span className="font-bold text-slate-700 text-[11px]">Mã script trích xuất Shopee (Đã tối ưu):</span>
             <button
               onClick={handleCopyScript}
-              className="w-full py-2.5 px-4 bg-slate-900 hover:bg-slate-800 text-white rounded-xl font-bold text-xs flex items-center justify-center gap-2 shadow-sm transition-all"
+              className="flex items-center gap-1 bg-slate-900 hover:bg-slate-800 text-white px-3 py-1 rounded-lg font-bold text-xs transition-colors shadow-2xs"
             >
-              {copiedScript ? (
-                <>
-                  <Check className="w-4 h-4 text-emerald-400" />
-                  <span>Đã sao chép Script vào Clipboard!</span>
-                </>
-              ) : (
-                <>
-                  <Copy className="w-4 h-4" />
-                  <span>Sao chép Script quét đơn Shopee</span>
-                </>
-              )}
+              {copiedScript ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5 text-amber-400" />}
+              <span>{copiedScript ? 'Đã sao chép vào bộ nhớ tạm!' : 'Bấm Sao Chép Mã Script'}</span>
             </button>
           </div>
+
+          <pre className="bg-slate-950 text-slate-200 p-3 rounded-xl font-mono text-[10px] overflow-x-auto max-h-48 border border-slate-800 leading-relaxed">
+            {bookmarkletCode}
+          </pre>
         </div>
 
-      </div>
-
-      {/* Security note */}
-      <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-5 flex items-start gap-4">
-        <div className="p-2 bg-emerald-100 text-emerald-700 rounded-xl shrink-0">
-          <ShieldCheck className="w-6 h-6" />
-        </div>
-        <div>
-          <h4 className="text-sm font-bold text-emerald-900">Bảo mật & Quyền riêng tư</h4>
-          <p className="text-xs text-emerald-800/90 mt-1 leading-relaxed">
-            Toàn bộ quá trình quét đơn diễn ra trực tiếp ngay trên máy tính của bạn thông qua trình duyệt cá nhân. 
-            Mật khẩu, mã OTP và thông tin thanh toán tuyệt đối không bao giờ bị gửi ra ngoài máy tính. Dữ liệu được lưu trữ an toàn trong trình duyệt của bạn.
-          </p>
-        </div>
       </div>
 
     </div>

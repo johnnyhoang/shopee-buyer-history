@@ -1,5 +1,7 @@
 import React from 'react';
+import { AuthProvider, useAuth } from './context/AuthContext';
 import { AppProvider, useApp } from './context/AppContext';
+import { LoginScreen } from './components/LoginScreen';
 import { LedgerHeader } from './components/LedgerHeader';
 import { RefundLedgerTable } from './components/RefundLedgerTable';
 import { FullHistoryLedgerTable } from './components/FullHistoryLedgerTable';
@@ -18,7 +20,12 @@ import {
 } from 'lucide-react';
 
 const MainLayout = () => {
+  const { isAuthenticated } = useAuth();
   const { activeTab, setActiveTab, ledgerTotals, notification } = useApp();
+
+  if (!isAuthenticated) {
+    return <LoginScreen />;
+  }
 
   return (
     <div className="min-h-screen flex flex-col bg-slate-100 text-slate-900 font-sans">
@@ -117,8 +124,10 @@ const MainLayout = () => {
 
 export default function App() {
   return (
-    <AppProvider>
-      <MainLayout />
-    </AppProvider>
+    <AuthProvider>
+      <AppProvider>
+        <MainLayout />
+      </AppProvider>
+    </AuthProvider>
   );
 }

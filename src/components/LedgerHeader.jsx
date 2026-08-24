@@ -1,5 +1,6 @@
 import React from 'react';
 import { useApp } from '../context/AppContext';
+import { useAuth } from '../context/AuthContext';
 import { formatCurrency } from '../utils/formatters';
 import { exportToCSV } from '../utils/csvExport';
 import { 
@@ -11,10 +12,13 @@ import {
   CheckCircle2, 
   Clock, 
   AlertTriangle,
-  Trash2
+  Trash2,
+  LogOut,
+  UserCheck
 } from 'lucide-react';
 
 export const LedgerHeader = () => {
+  const { user, logout } = useAuth();
   const { 
     accounts, 
     activeAccountId, 
@@ -114,6 +118,21 @@ export const LedgerHeader = () => {
             >
               <Trash2 className="w-3.5 h-3.5" />
             </button>
+
+            {/* User info & Logout */}
+            <div className="flex items-center pl-1 border-l border-slate-200 space-x-1">
+              <div className="hidden md:flex items-center gap-1.5 px-2 py-1 bg-slate-100 rounded-lg text-[11px] font-bold text-slate-700">
+                <UserCheck className="w-3.5 h-3.5 text-emerald-600" />
+                <span>{user?.name || 'Thùy Nga'}</span>
+              </div>
+              <button
+                onClick={logout}
+                title="Đăng xuất"
+                className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-slate-100 rounded-lg transition-colors flex items-center gap-1 text-xs"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+              </button>
+            </div>
 
           </div>
         </div>

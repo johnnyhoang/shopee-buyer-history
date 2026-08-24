@@ -11,7 +11,8 @@ import {
   Users,
   Download,
   ShieldCheck,
-  Filter
+  Filter,
+  Check
 } from 'lucide-react';
 
 export const SyncModal = () => {
@@ -27,7 +28,9 @@ export const SyncModal = () => {
   const [selectedAccountId, setSelectedAccountId] = useState(accounts[0]?.id || 'acc_main');
   const [isNewAccount, setIsNewAccount] = useState(false);
   const [newAccountName, setNewAccountName] = useState('');
+  const [filterRefundOnly, setFilterRefundOnly] = useState(true);
   const [errorMsg, setErrorMsg] = useState('');
+  const [unfilteredOrdersCache, setUnfilteredOrdersCache] = useState(null);
 
   if (!isSyncModalOpen) return null;
 
@@ -39,6 +42,7 @@ export const SyncModal = () => {
     reader.onload = (event) => {
       setJsonText(event.target.result);
       setErrorMsg('');
+      setUnfilteredOrdersCache(null);
     };
     reader.onerror = () => {
       setErrorMsg('Không thể đọc file đã chọn.');
@@ -46,7 +50,15 @@ export const SyncModal = () => {
     reader.readAsText(file);
   };
 
-  const parseShopeeData = (parsed) => {
+  const parseNumber = (val) => {
+    if (typeof val === 'number') return val;
+    if (!val) return 0;
+    const clean = String(val).replace(/[^0-9.-]+/g, '');
+    const num = parseFloat(clean);
+    return isNaN(num) ? 0 : num;
+  };
+
+  const parseShopeeData = (parsed, applyFilter = true) => {
     let rawList = [];
 
     if (Array.isArray(parsed)) {
@@ -64,17 +76,32 @@ export const SyncModal = () => {
     }
 
     const mapped = rawList.map((item) => {
+      // Nếu đã có cấu trúc định dạng chuẩn
       if (item.orderCode && item.status) {
-        return item;
+        const total = parseNumber(item.totalAmount);
+        const refund = item.refundAmount !== undefined ? parseNumber(item.refundAmount) : total;
+        return {
+          ...item,
+          orderCode: String(item.orderCode),
+          status: String(item.status).toUpperCase(),
+          totalAmount: total,
+          refundAmount: refund,
+          paymentMethod: item.paymentMethod || 'ShopeePay / Thẻ',
+          userNote: item.userNote || '',
+          items: item.items || [],
+        };
       }
 
+      // Xử lý object thô từ Shopee
       const info = item.info_card || item;
       const rawItems = item.item_list || item.items || [];
       const items = rawItems.map(p => ({
         name: p.item_info?.item_name || p.name || 'Sản phẩm Shopee',
         imageUrl: p.item_info?.item_image ? `https://down-vn.img.susercontent.com/file/${p.item_info.item_image}` : '',
-        quantity: p.order_price_info?.amount || p.amount || 1,
-        price: (p.order_price_info?.final_price || p.price || 0) / 100000,
+        quantity: parseNumber(p.order_price_info?.amount || p.amount || 1),
+        price: parseNumber(p.order_price_info?.final_price || p.price || 0) > 10000000 
+          ? parseNumber(p.order_price_info?.final_price || p.price || 0) / 100000 
+          : parseNumber(p.order_price_info?.final_price || p.price || 0),
         modelName: p.item_info?.model_name || p.model_name || ''
       }));
 
@@ -88,7 +115,7 @@ export const SyncModal = () => {
       else if (st.includes('chờ lấy hàng') || st.includes('đang xử lý')) status = 'PROCESSING';
 
       const orderId = item.order_id || item.order_sn || item.id || Date.now();
-      const rawPrice = info.subtotal_price || info.total_price || item.final_total || item.totalAmount || 0;
+      const rawPrice = parseNumber(info.subtotal_price || info.total_price || item.final_total || item.totalAmount || 0);
       const total = rawPrice > 10000000 ? rawPrice / 100000 : rawPrice;
 
       return {
@@ -108,18 +135,24 @@ export const SyncModal = () => {
       };
     });
 
-    // 🎯 BỘ LỌC CHỈ NẠP CÁC ĐƠN CẦN HOÀN TIỀN (Theo yêu cầu):
-    // - Đơn Trả hàng / Hoàn tiền -> LẤY
-    // - Đơn Đã Hủy CÓ THANH TOÁN (tiền hoàn > 1.000đ) -> LẤY
-    // - Đơn đang giao, chờ thanh toán, hoàn thành bình thường, đơn hủy 0đ chưa trả tiền -> BỎ QUA
+    if (!applyFilter) {
+      return mapped;
+    }
+
+    // 🎯 BỘ LỌC CHỈ NẠP CÁC ĐƠN CẦN HOÀN TIỀN:
     const refundOnlyOrders = mapped.filter(ord => {
-      const isReturnRefund = ord.status === 'REFUNDED' || 
-                             ord.status === 'REFUNDING' || 
-                             (ord.statusText || '').toLowerCase().includes('trả hàng') || 
-                             (ord.statusText || '').toLowerCase().includes('hoàn tiền');
+      const statusUpper = (ord.status || '').toUpperCase();
+      const statusTextLower = (ord.statusText || '').toLowerCase();
+
+      // 1. Đơn Trả hàng / Hoàn tiền -> LẤY
+      const isReturnRefund = statusUpper === 'REFUNDED' || 
+                             statusUpper === 'REFUNDING' || 
+                             statusTextLower.includes('trả hàng') || 
+                             statusTextLower.includes('hoàn tiền');
       
-      const refundAmt = Number(ord.refundAmount || ord.totalAmount || 0);
-      const isCancelledPaid = (ord.status === 'CANCELLED' || (ord.statusText || '').toLowerCase().includes('hủy')) && refundAmt > 1000;
+      // 2. Đơn Đã Hủy có phát sinh tiền (> 0)
+      const refundAmt = parseNumber(ord.refundAmount || ord.totalAmount || 0);
+      const isCancelledPaid = (statusUpper === 'CANCELLED' || statusTextLower.includes('hủy')) && refundAmt > 0;
 
       return isReturnRefund || isCancelledPaid;
     });
@@ -127,8 +160,10 @@ export const SyncModal = () => {
     return refundOnlyOrders;
   };
 
-  const handleProcessImport = () => {
+  const handleProcessImport = (forceAll = false) => {
     setErrorMsg('');
+    setUnfilteredOrdersCache(null);
+
     if (!jsonText.trim()) {
       setErrorMsg('Vui lòng dán nội dung JSON hoặc chọn file JSON.');
       return;
@@ -136,11 +171,20 @@ export const SyncModal = () => {
 
     try {
       const parsed = JSON.parse(jsonText);
-      const ordersArray = parseShopeeData(parsed);
+      const shouldFilter = forceAll ? false : filterRefundOnly;
+      const ordersArray = parseShopeeData(parsed, shouldFilter);
 
       if (ordersArray.length === 0) {
-        setErrorMsg('Không tìm thấy đơn Trả hàng hoặc Đơn hủy đã thanh toán nào trong dữ liệu này (các đơn đang giao / đơn hủy chưa thanh toán đã được tự động bỏ qua).');
-        return;
+        // Kiểm tra xem nếu không lọc thì có bao nhiêu đơn
+        const allOrders = parseShopeeData(parsed, false);
+        if (allOrders.length > 0) {
+          setUnfilteredOrdersCache(allOrders);
+          setErrorMsg(`Dữ liệu có ${allOrders.length} đơn hàng nhưng đều là đơn Hoàn thành/Đang giao bình thường (không có đơn Hủy/Trả hàng).`);
+          return;
+        } else {
+          setErrorMsg('Không tìm thấy đơn hàng nào trong file dữ liệu.');
+          return;
+        }
       }
 
       const accId = isNewAccount ? `acc_${Date.now()}` : selectedAccountId;
@@ -180,8 +224,8 @@ export const SyncModal = () => {
               <DownloadCloud className="w-4 h-4" />
             </div>
             <div>
-              <h3 className="font-bold text-slate-900 text-sm">Nhập Dữ Liệu Hoàn Tiền</h3>
-              <p className="text-[11px] text-slate-500">Tự động chọn lọc đơn Trả hàng & Đơn hủy đã thanh toán</p>
+              <h3 className="font-bold text-slate-900 text-sm">Nhập Dữ Liệu Vào Sổ</h3>
+              <p className="text-[11px] text-slate-500">Hỗ trợ file xuất Shopee và file sao lưu JSON</p>
             </div>
           </div>
 
@@ -196,18 +240,6 @@ export const SyncModal = () => {
         {/* Content */}
         <div className="p-4 space-y-3 max-h-[75vh] overflow-y-auto text-xs">
           
-          {/* Smart Filter Info Banner */}
-          <div className="bg-amber-50/80 border border-amber-300/80 p-2.5 rounded-xl flex items-start gap-2 text-[11px] text-amber-900">
-            <Filter className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-            <div>
-              <strong className="font-bold">Quy tắc nạp thông minh:</strong>
-              <div className="text-amber-800/90 mt-0.5">
-                • <strong>Chỉ nạp:</strong> Đơn <strong>Trả hàng</strong> và Đơn <strong>Đã hủy có phát sinh tiền hoàn</strong>.<br />
-                • <strong>Tự động bỏ qua:</strong> Đơn đang giao, chờ giao và đơn hủy khi chưa thanh toán.
-              </div>
-            </div>
-          </div>
-
           {/* Target Account Selection */}
           <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-1.5">
             <label className="text-[11px] font-bold text-slate-700 flex items-center gap-1">
@@ -252,10 +284,36 @@ export const SyncModal = () => {
             )}
           </div>
 
+          {/* Smart Filter Toggle */}
+          <div 
+            onClick={() => setFilterRefundOnly(!filterRefundOnly)}
+            className={`p-2.5 rounded-xl border cursor-pointer transition-all flex items-start gap-2.5 ${
+              filterRefundOnly 
+                ? 'bg-amber-50/80 border-amber-300 text-amber-950' 
+                : 'bg-slate-50 border-slate-200 text-slate-700'
+            }`}
+          >
+            <input
+              type="checkbox"
+              checked={filterRefundOnly}
+              onChange={() => {}}
+              className="rounded text-amber-600 focus:ring-0 cursor-pointer w-4 h-4 mt-0.5"
+            />
+            <div className="text-[11px] flex-1">
+              <strong className="font-bold flex items-center gap-1">
+                <Filter className="w-3.5 h-3.5 text-amber-600" />
+                Chỉ nạp các đơn Cần hoàn tiền (Khuyên dùng)
+              </strong>
+              <div className="text-slate-600 mt-0.5 leading-relaxed">
+                Tự động lọc đơn <strong>Trả hàng / Hoàn tiền</strong> và đơn <strong>Đã hủy có thanh toán</strong>. Bỏ qua đơn đang giao và đơn hủy 0đ.
+              </div>
+            </div>
+          </div>
+
           {/* File Upload Box */}
           <div>
             <label className="text-[11px] font-bold text-slate-700 block mb-1">
-              Chọn file JSON từ Shopee:
+              Chọn file JSON:
             </label>
             <div className="border border-dashed border-slate-300 hover:border-slate-800 bg-slate-50/50 hover:bg-slate-100/50 rounded-xl p-3 text-center cursor-pointer transition-all relative">
               <input
@@ -277,17 +335,36 @@ export const SyncModal = () => {
             <textarea
               rows={4}
               value={jsonText}
-              onChange={(e) => { setJsonText(e.target.value); setErrorMsg(''); }}
-              placeholder="Dán dữ liệu JSON..."
+              onChange={(e) => { 
+                setJsonText(e.target.value); 
+                setErrorMsg(''); 
+                setUnfilteredOrdersCache(null);
+              }}
+              placeholder="Dán dữ liệu JSON vào đây..."
               className="w-full text-[11px] p-2 bg-slate-50 border border-slate-200 rounded-xl font-mono focus:bg-white focus:outline-none focus:ring-1 focus:ring-slate-900"
             />
           </div>
 
-          {/* Error message */}
+          {/* Error message / Notice */}
           {errorMsg && (
-            <div className="p-2.5 bg-rose-50 border border-rose-200 rounded-xl flex items-start gap-2 text-rose-700 text-[11px]">
-              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-              <span>{errorMsg}</span>
+            <div className="p-2.5 bg-rose-50 border border-rose-200 rounded-xl space-y-2 text-rose-800 text-[11px]">
+              <div className="flex items-start gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-rose-600" />
+                <span>{errorMsg}</span>
+              </div>
+
+              {unfilteredOrdersCache && (
+                <div className="pt-1 border-t border-rose-200 flex items-center justify-between">
+                  <span className="text-slate-700 font-medium">Bạn vẫn muốn nạp tất cả?</span>
+                  <button
+                    type="button"
+                    onClick={() => handleProcessImport(true)}
+                    className="bg-slate-900 hover:bg-slate-800 text-white font-bold px-2.5 py-1 rounded-lg text-xs"
+                  >
+                    👉 Nạp tất cả {unfilteredOrdersCache.length} đơn này
+                  </button>
+                </div>
+              )}
             </div>
           )}
 
@@ -318,7 +395,7 @@ export const SyncModal = () => {
           
           <button
             type="button"
-            onClick={handleProcessImport}
+            onClick={() => handleProcessImport(false)}
             className="px-4 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white font-bold transition-all shadow-2xs flex items-center gap-1.5"
           >
             <CheckCircle2 className="w-4 h-4 text-amber-400" />

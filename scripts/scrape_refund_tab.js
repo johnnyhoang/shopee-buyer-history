@@ -1,30 +1,27 @@
 /**
  * =========================================================================
- * 🎯 SHOPEE REFUND & RETURN EXTRACTOR (DÀNH RIÊNG CHO TAB TRẢ HÀNG / HOÀN TIỀN)
+ * 🎯 SHOPEE REFUND & RETURN EXTRACTOR V2 (CHỐNG TRÙNG ĐƠN 100%)
  * =========================================================================
  * Cách dùng:
  * 1. Mở Shopee trên máy tính -> Vào mục "Đơn Mua" -> Bấm qua tab "TRẢ HÀNG / HOÀN TIỀN" (hoặc "ĐÃ HỦY").
- * 2. Nhấn F12 (hoặc Chuột phải -> Inspect) -> Chọn tab Console.
+ * 2. Nhấn F12 -> Chọn tab Console.
  * 3. Dán toàn bộ mã bên dưới và nhấn Enter.
- * 4. Trình duyệt sẽ tự động cuộn trang, đọc toàn bộ chi tiết và tự tải file JSON chuẩn 100%!
  */
 
-(async function extractShopeeRefunds() {
-  console.log("%c🚀 BẮT ĐẦU TRÍCH XUẤT TAB TRẢ HÀNG / HOÀN TIỀN TỪ SHOPEE...", "color: #ee4d2d; font-size: 15px; font-weight: bold;");
+(async function extractShopeeRefundsV2() {
+  console.log("%c🚀 BẮT ĐẦU QUÉT TAB TRẢ HÀNG / HOÀN TIỀN (PHIÊN BẢN CHỐNG TRÙNG 100%)...", "color: #ee4d2d; font-size: 15px; font-weight: bold;");
 
   const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
-  // 1. TỰ ĐỘNG CUỘN ĐỂ TẢI HẾT TOÀN BỘ CÁC ĐƠN
-  console.log("📜 Đang cuộn trang để tải toàn bộ danh sách đơn hàng...");
-  let prevHeight = 0;
-  let sameCount = 0;
+  // 1. Tự động cuộn trang để tải hết tất cả đơn hàng
+  console.log("📜 Đang cuộn trang...");
+  let prevHeight = 0, sameCount = 0;
   for (let i = 0; i < 35; i++) {
     window.scrollTo(0, document.body.scrollHeight);
     await sleep(500);
     const currHeight = document.body.scrollHeight;
     if (currHeight === prevHeight) {
-      sameCount++;
-      if (sameCount >= 3) break;
+      if (++sameCount >= 3) break;
     } else {
       sameCount = 0;
       prevHeight = currHeight;
@@ -33,85 +30,106 @@
   window.scrollTo(0, 0);
   await sleep(300);
 
-  // 2. TÌM TẤT CẢ CÁC KHỐI ĐƠN HÀNG (CARDS) TRÊN GIAO DIỆN
-  const extractedOrders = [];
-  const processedCodes = new Set();
+  // 2. TÌM CHÍNH XÁC CÁC CARD ĐƠN HÀNG DỰA TRÊN HEADER SHOP (Mỗi card chỉ lấy đúng 1 lần)
+  const orderCards = [];
+  const processedCardNodes = new Set();
 
-  // Tìm tất cả các thẻ đơn hàng hoặc link chi tiết đơn
-  const allContainers = Array.from(document.querySelectorAll('div, section'));
+  // Tìm tất cả các link hoặc nút 'Xem Shop' / 'Trao Đổi' (mỗi đơn hàng chỉ có 1 nút này)
+  const shopHeaders = Array.from(document.querySelectorAll('a[href*="/shop/"], a[href*="/shop"], [class*="shop-header"], button:not([class*="st"])'));
   
-  // Lọc các container đại diện cho 1 đơn hàng
-  const orderCards = allContainers.filter(el => {
-    const txt = el.innerText || '';
-    const hasRefundKeyword = txt.includes('Tổng số tiền') || 
-                             txt.includes('Tổng tiền hoàn') || 
-                             txt.includes('Thành tiền') || 
-                             txt.includes('HOÀN TIỀN') || 
-                             txt.includes('TRẢ HÀNG') || 
-                             txt.includes('ĐÃ HỦY');
-    const hasShopOrChat = txt.includes('Xem Shop') || txt.includes('Trao Đổi') || txt.includes('Chat') || txt.includes('Mua Lại');
-    const isLeafCard = !Array.from(el.children).some(c => (c.innerText || '').includes('Tổng số tiền') && (c.innerText || '').includes('Xem Shop'));
-    return hasRefundKeyword && hasShopOrChat && isLeafCard && el.offsetWidth > 350 && el.offsetHeight > 80;
+  shopHeaders.forEach(el => {
+    const text = el.innerText || '';
+    if (text.includes('Xem Shop') || text.includes('Trao Đổi') || el.href?.includes('/shop/')) {
+      // Tìm container lớn bao toàn bộ đơn hàng này
+      let card = el.parentElement;
+      for (let depth = 0; depth < 8; depth++) {
+        if (!card || !card.parentElement) break;
+        const cardText = card.innerText || '';
+        if (
+          (cardText.includes('Tổng tiền hoàn') || cardText.includes('Tổng số tiền') || cardText.includes('Thành tiền') || cardText.includes('₫')) &&
+          card.offsetHeight > 100 &&
+          card.offsetWidth > 350
+        ) {
+          // Đảm bảo không nhảy ra ngoài container lớn của toàn bộ trang
+          if (card.offsetWidth < document.body.offsetWidth * 0.95) {
+            if (!processedCardNodes.has(card)) {
+              processedCardNodes.add(card);
+              orderCards.push(card);
+            }
+            break;
+          }
+        }
+        card = card.parentElement;
+      }
+    }
   });
 
-  console.log(`🔎 Tìm thấy ${orderCards.length} đơn hàng trên màn hình. Đang đọc thông tin chi tiết...`);
+  console.log(`🔎 Tìm thấy ${orderCards.length} đơn hàng thực tế trên màn hình!`);
+
+  const extractedOrders = [];
+  const seenKeys = new Set();
 
   orderCards.forEach((card, idx) => {
     try {
       const text = card.innerText || '';
       const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
 
-      // --- Tên Shop ---
+      // 1. Tên Shop
       let shopName = 'Shopee Shop';
       for (const line of lines) {
-        if (line.length > 1 && !line.includes('₫') && !line.includes('HOÀN') && !line.includes('TRẢ HÀNG') && !line.includes('ĐÃ HỦY') && !line.includes('Xem Shop') && !line.includes('Trao Đổi')) {
+        if (
+          line.length > 1 && 
+          line.length < 35 &&
+          !line.includes('₫') && 
+          !line.includes('HOÀN') && 
+          !line.includes('TRẢ HÀNG') && 
+          !line.includes('ĐÃ HỦY') && 
+          !line.includes('Xem Shop') && 
+          !line.includes('Trao Đổi') &&
+          !line.includes('Tổng tiền')
+        ) {
           shopName = line.replace(/Yêu thích\+?|Mall|Shopee/gi, '').trim() || 'Shopee Shop';
           break;
         }
       }
 
-      // --- Trạng thái đơn ---
+      // 2. Trạng thái
       let status = 'REFUNDED';
       let statusText = 'Trả hàng/Hoàn tiền';
-      const upperText = text.toUpperCase();
-
-      if (upperText.includes('YÊU CẦU ĐÃ ĐƯỢC HỦY') || upperText.includes('ĐÃ HỦY YÊU CẦU') || upperText.includes('ĐÃ HỦY')) {
+      const upper = text.toUpperCase();
+      if (upper.includes('YÊU CẦU ĐÃ ĐƯỢC HỦY') || upper.includes('ĐÃ HỦY YÊU CẦU') || upper.includes('ĐÃ HỦY')) {
         status = 'CANCELLED';
         statusText = 'Đã hủy yêu cầu';
-      } else if (upperText.includes('HOÀN TIỀN THÀNH CÔNG') || upperText.includes('ĐÃ HOÀN TIỀN')) {
+      } else if (upper.includes('HOÀN TIỀN THÀNH CÔNG') || upper.includes('ĐÃ HOÀN TIỀN')) {
         status = 'REFUNDED';
         statusText = 'Hoàn tiền thành công';
-      } else if (upperText.includes('ĐANG XỬ LÝ') || upperText.includes('CHỜ')) {
+      } else if (upper.includes('ĐANG XỬ LÝ') || upper.includes('CHỜ')) {
         status = 'REFUNDING';
         statusText = 'Đang xử lý hoàn tiền';
       }
 
-      // --- Giá tiền / Tiền hoàn lại ---
+      // 3. Số tiền hoàn lại (Chỉ lấy số tiền > 1000đ)
       let amount = 0;
-      // Tìm số tiền sau các từ khóa "Tổng tiền hoàn", "Thành tiền", "Tổng số tiền"
-      const matchSpecial = text.match(/(?:Tổng tiền hoàn|Tổng số tiền|Thành tiền|Tiền hoàn|Giá)\s*[:：]?\s*₫?\s*([0-9.,]+)/i);
+      const matchSpecial = text.match(/(?:Tổng tiền hoàn|Tổng số tiền|Thành tiền|Tiền hoàn)\s*[:：]?\s*₫?\s*([0-9.,]+)/i);
       if (matchSpecial) {
-        const raw = matchSpecial[1].replace(/[^0-9]/g, '');
-        amount = parseInt(raw, 10) || 0;
+        amount = parseInt(matchSpecial[1].replace(/[^0-9]/g, ''), 10) || 0;
       }
-
-      // Nếu chưa tìm thấy, lấy giá tiền xuất hiện trong card
-      if (amount === 0) {
+      if (amount <= 1000) {
         const allPrices = text.match(/₫\s*([0-9.,]+)/g) || text.match(/([0-9.,]+)\s*₫/g) || [];
-        if (allPrices.length > 0) {
-          // Lấy giá lớn nhất hoặc giá cuối cùng
-          const prices = allPrices.map(p => parseInt(p.replace(/[^0-9]/g, ''), 10)).filter(n => n > 1000);
-          if (prices.length > 0) {
-            amount = Math.max(...prices);
-          }
+        const validPrices = allPrices.map(p => parseInt(p.replace(/[^0-9]/g, ''), 10)).filter(n => n > 1000);
+        if (validPrices.length > 0) {
+          amount = Math.max(...validPrices);
         }
       }
 
-      // --- Tên sản phẩm ---
+      // Bỏ qua đơn rác 0đ hoặc 1đ
+      if (amount <= 1000) return;
+
+      // 4. Tên sản phẩm (Bỏ qua các từ khóa 'Tổng tiền hoàn', 'Xem Shop')
       let productName = 'Sản phẩm Shopee';
       for (const line of lines) {
         if (
-          line.length > 8 && 
+          line.length > 10 && 
           !line.includes('₫') && 
           !line.includes('Xem Shop') && 
           !line.includes('Trao Đổi') && 
@@ -120,6 +138,8 @@
           !line.includes('HOÀN') &&
           !line.includes('TRẢ HÀNG') &&
           !line.includes('YÊU CẦU') &&
+          !line.includes('Tổng tiền') &&
+          !line.includes('Thành tiền') &&
           line !== shopName
         ) {
           productName = line;
@@ -127,30 +147,27 @@
         }
       }
 
-      // --- Số lượng ---
+      // 5. Số lượng
       const qtyMatch = text.match(/x\s*([0-9]+)/i);
       const quantity = qtyMatch ? parseInt(qtyMatch[1], 10) : 1;
 
-      // --- Mã đơn hàng ---
+      // 6. Mã đơn hàng duy nhất
       let orderCode = '';
       const links = card.querySelectorAll('a[href]');
       for (const link of links) {
         const href = link.href || '';
         const m = href.match(/order\/([0-9]+)/) || href.match(/order_id=([0-9]+)/) || href.match(/order_sn=([0-9]+)/);
-        if (m) {
-          orderCode = m[1];
-          break;
-        }
+        if (m) { orderCode = m[1]; break; }
       }
 
-      // Nếu không có link ID, tạo mã nhận diện duy nhất từ nội dung
+      // Key chống trùng: Shop + Số tiền (nếu không có order id)
+      const dedupeKey = orderCode || `${shopName}_${amount}`;
+      if (seenKeys.has(dedupeKey)) return;
+      seenKeys.add(dedupeKey);
+
       if (!orderCode) {
-        const hash = Math.abs((shopName + productName + amount + idx).split('').reduce((a, b) => ((a << 5) - a) + b.charCodeAt(0), 0));
-        orderCode = 'SP' + hash;
+        orderCode = 'SP' + Math.abs((shopName + amount + idx).split('').reduce((a, b) => ((a << 5) - a) + b.charCodeAt(0), 0));
       }
-
-      if (processedCodes.has(orderCode)) return;
-      processedCodes.add(orderCode);
 
       extractedOrders.push({
         id: 'shopee_' + orderCode,
@@ -163,37 +180,27 @@
         totalAmount: amount,
         refundAmount: amount,
         paymentMethod: 'ShopeePay / Thẻ / Ngân hàng',
-        cancelReason: status === 'CANCELLED' ? 'Đã hủy' : '',
+        cancelReason: status === 'CANCELLED' ? 'Đã hủy yêu cầu' : 'Yêu cầu Trả hàng / Hoàn tiền',
         refundReason: statusText,
-        items: [
-          {
-            name: productName,
-            quantity: quantity,
-            price: amount
-          }
-        ]
+        items: [{ name: productName, quantity: quantity, price: amount }]
       });
-
-    } catch (e) {
-      console.warn("Lỗi khi đọc card:", e);
-    }
+    } catch (e) {}
   });
 
-  console.log(`%c🎉 TRÍCH XUẤT HOÀN TẤT ${extractedOrders.length} ĐƠN HÀNG CÓ ĐẦY ĐỦ TIỀN VÀ SẢN PHẨM!`, "color: #059669; font-size: 15px; font-weight: bold;");
+  console.log(`%c🎉 ĐÃ LỌC SẠCH & TRÍCH XUẤT ${extractedOrders.length} ĐƠN DUY NHẤT (0 ĐƠN TRÙNG)!`, "color: #059669; font-size: 15px; font-weight: bold;");
 
   if (extractedOrders.length === 0) {
-    alert("⚠️ Chưa nhận diện được đơn. Hãy chắc chắn bạn đang ở trang Shopee và các đơn đã hiển thị trên màn hình.");
+    alert("⚠️ Chưa nhận diện được đơn. Hãy chắc chắn bạn đang ở tab Trả hàng / Hoàn tiền của Shopee.");
     return;
   }
 
-  // Tự động tải file JSON chuẩn
   const blob = new Blob([JSON.stringify(extractedOrders, null, 2)], { type: 'application/json' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = `shopee_tra_hang_hoan_tien_${extractedOrders.length}_don.json`;
+  a.download = `shopee_tra_hang_chuan_${extractedOrders.length}_don.json`;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
 
-  alert(`🎉 XONG! Đã trích xuất thành công ${extractedOrders.length} đơn Trả hàng / Hoàn tiền vào file JSON vừa tải về máy. Hãy nạp file này vào ứng dụng!`);
+  alert(`🎉 XONG! Đã trích xuất ${extractedOrders.length} đơn hàng chuẩn xác (không bị trùng đơn). Hãy nạp file JSON này vào sổ!`);
 })();

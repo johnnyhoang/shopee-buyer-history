@@ -35,7 +35,8 @@ export const RefundLedgerTable = () => {
     batchDisputeRefunds,
     deleteOrder,
     batchDeleteOrders,
-    markNoRefundNeeded
+    markNoRefundNeeded,
+    autoDeduplicateOrders
   } = useApp();
 
   const [selectedIds, setSelectedIds] = useState([]);
@@ -187,6 +188,19 @@ export const RefundLedgerTable = () => {
               </option>
             ))}
           </select>
+
+          {/* Dọn đơn trùng */}
+          <button
+            onClick={() => {
+              if (window.confirm('Tự động quét và loại bỏ các dòng rác (Tổng tiền hoàn) và đơn trùng lặp?')) {
+                autoDeduplicateOrders();
+              }
+            }}
+            title="Lọc sạch dòng rác và đơn trùng lặp"
+            className="flex items-center gap-1 bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300 font-bold px-2 py-1 rounded text-[11px] transition-colors shrink-0"
+          >
+            <span>🧹 Dọn đơn trùng</span>
+          </button>
 
         </div>
 

@@ -197,6 +197,44 @@ export const storageService = {
     };
   },
 
+  // Dọn dẹp dòng rác và loại bỏ đơn trùng lặp
+  cleanAndDeduplicateOrders: (ordersList) => {
+    // 1. Loại bỏ các dòng rác (Tên sản phẩm là "Tổng tiền hoàn", "Xem Shop", hoặc tiền <= 1000đ)
+    const validOrders = ordersList.filter(ord => {
+      const firstItemName = (ord.items?.[0]?.name || '').trim().toLowerCase();
+      const isJunkName = firstItemName === 'tổng tiền hoàn' || 
+                         firstItemName === 'thành tiền' || 
+                         firstItemName === 'xem shop';
+      const isZeroOrOneDong = Number(ord.refundAmount || ord.totalAmount || 0) <= 1000;
+      return !isJunkName && !isZeroOrOneDong;
+    });
+
+    // 2. Gom nhóm chống trùng lặp theo Shop + Số tiền
+    const uniqueMap = new Map();
+    validOrders.forEach(ord => {
+      const isGenKey = String(ord.orderCode).startsWith('SP');
+      const uniqueKey = isGenKey 
+        ? `${ord.shopName}_${Math.round(ord.refundAmount || ord.totalAmount)}`
+        : String(ord.orderCode || ord.id);
+
+      if (!uniqueMap.has(uniqueKey)) {
+        uniqueMap.set(uniqueKey, ord);
+      } else {
+        const existing = uniqueMap.get(uniqueKey);
+        const existingName = existing.items?.[0]?.name || '';
+        const currentName = ord.items?.[0]?.name || '';
+        if (currentName.length > existingName.length && currentName !== 'Sản phẩm Shopee') {
+          uniqueMap.set(uniqueKey, { ...existing, ...ord, id: existing.id });
+        }
+      }
+    });
+
+    const cleaned = Array.from(uniqueMap.values());
+    cleaned.sort((a, b) => new Date(b.orderTime || 0) - new Date(a.orderTime || 0));
+    storageService.saveOrders(cleaned);
+    return cleaned;
+  },
+
   // Xuất toàn bộ dữ liệu ra JSON
   exportDataJSON: () => {
     const data = {

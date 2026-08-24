@@ -234,6 +234,20 @@ export const AppProvider = ({ children }) => {
     showNotification(`Đã xóa ${orderIds.length} đơn hàng khỏi sổ!`, 'info');
   };
 
+  // Tự động dọn dẹp đơn trùng lặp và dòng rác
+  const autoDeduplicateOrders = () => {
+    const currentOrders = storageService.getOrders();
+    const originalCount = currentOrders.length;
+    const cleaned = storageService.cleanAndDeduplicateOrders(currentOrders);
+    setOrders(cleaned);
+    const removedCount = originalCount - cleaned.length;
+    if (removedCount > 0) {
+      showNotification(`Đã lọc sạch ${removedCount} đơn trùng lặp & dòng rác!`, 'success');
+    } else {
+      showNotification('Sổ sách đã sạch sẽ, không có đơn trùng lặp!', 'info');
+    }
+  };
+
   // Đánh dấu đơn hủy chưa thanh toán (không cần hoàn tiền)
   const markNoRefundNeeded = (orderId) => {
     updateRefundField(orderId, { refundStatus: 'NO_REFUND_NEEDED' });
@@ -372,6 +386,7 @@ export const AppProvider = ({ children }) => {
         deleteOrder,
         batchDeleteOrders,
         markNoRefundNeeded,
+        autoDeduplicateOrders,
         isCloudSyncing,
       }}
     >

@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
 import { storageService } from '../services/storage';
+import { cloudStorage } from '../services/cloudStorage';
 import { normalizePaymentMethod } from '../utils/formatters';
 
 const AppContext = createContext(null);
@@ -8,14 +9,15 @@ export const AppProvider = ({ children }) => {
   const [accounts, setAccounts] = useState(() => storageService.getAccounts());
   const [orders, setOrders] = useState(() => storageService.getOrders());
   const [activeAccountId, setActiveAccountId] = useState(() => storageService.getActiveAccountId());
+  const [isCloudSyncing, setIsCloudSyncing] = useState(false);
   
-  // Navigation: 'refund-ledger' (Mặc định: Sổ đối soát hoàn tiền) | 'all-ledger' (Sổ tất cả đơn) | 'sync-guide'
+  // Navigation: 'refund-ledger' | 'all-ledger' | 'sync-guide'
   const [activeTab, setActiveTab] = useState('refund-ledger');
   
   // Filters for Accounting Ledger
   const [searchQuery, setSearchQuery] = useState('');
-  const [orderTypeFilter, setOrderTypeFilter] = useState('ALL'); // 'ALL' | 'CANCELLED' | 'REFUNDED'
-  const [reconciliationFilter, setReconciliationFilter] = useState('ALL'); // 'ALL' | 'UNRESOLVED' (Chưa nhận) | 'CONFIRMED' (Đã nhận) | 'DISPUTED' (Quá hạn)
+  const [orderTypeFilter, setOrderTypeFilter] = useState('ALL');
+  const [reconciliationFilter, setReconciliationFilter] = useState('ALL');
   const [paymentMethodFilter, setPaymentMethodFilter] = useState('ALL');
   
   // Modal states
@@ -23,6 +25,31 @@ export const AppProvider = ({ children }) => {
   const [isAccountModalOpen, setIsAccountModalOpen] = useState(false);
   const [isSyncModalOpen, setIsSyncModalOpen] = useState(false);
   const [notification, setNotification] = useState(null);
+
+  // Tự động kéo dữ liệu mới nhất từ Supabase Cloud khi mở ứng dụng
+  useEffect(() => {
+    let isMounted = true;
+    const loadFromCloud = async () => {
+      setIsCloudSyncing(true);
+      try {
+        const [cloudAccs, cloudOrds] = await Promise.all([
+          cloudStorage.fetchAccounts(),
+          cloudStorage.fetchOrders()
+        ]);
+        if (isMounted) {
+          if (Array.isArray(cloudAccs) && cloudAccs.length > 0) setAccounts(cloudAccs);
+          if (Array.isArray(cloudOrds)) setOrders(cloudOrds);
+        }
+      } catch (e) {
+        console.warn('Lỗi khi tải từ Supabase:', e);
+      } finally {
+        if (isMounted) setIsCloudSyncing(false);
+      }
+    };
+
+    loadFromCloud();
+    return () => { isMounted = false; };
+  }, []);
 
   const showNotification = (message, type = 'success') => {
     setNotification({ message, type });
@@ -36,20 +63,26 @@ export const AppProvider = ({ children }) => {
     storageService.setActiveAccountId(id);
   };
 
-  // Cập nhật trạng thái đối soát đơn lẻ
+  // Cập nhật trạng thái đối soát đơn lẻ (Đồng bộ Cloud)
   const updateRefundField = (orderId, updates) => {
     const currentOrders = storageService.getOrders();
+    let updatedTarget = null;
     const updatedOrders = currentOrders.map(ord => {
       if (ord.id === orderId || ord.orderCode === orderId) {
-        return { ...ord, ...updates };
+        updatedTarget = { ...ord, ...updates };
+        return updatedTarget;
       }
       return ord;
     });
     storageService.saveOrders(updatedOrders);
     setOrders(updatedOrders);
+
+    if (updatedTarget) {
+      cloudStorage.saveOrder(updatedTarget);
+    }
   };
 
-  // Đổi nhanh trạng thái nhận tiền
+  // Đổi nhanh trạng thái nhận tiền (Đồng bộ Cloud)
   const toggleRefundStatus = (orderId) => {
     const currentOrders = storageService.getOrders();
     const target = currentOrders.find(o => o.id === orderId || o.orderCode === orderId);
@@ -67,19 +100,25 @@ export const AppProvider = ({ children }) => {
       showNotification(`Đã xác nhận nhận đủ tiền đơn #${target.orderCode}!`, 'success');
     }
 
+    let updatedTarget = null;
     const updated = currentOrders.map(ord => {
       if (ord.id === orderId || ord.orderCode === orderId) {
-        return {
+        updatedTarget = {
           ...ord,
           refundStatus: nextStatus,
           refundConfirmedAt: nextConfirmedAt,
         };
+        return updatedTarget;
       }
       return ord;
     });
 
     storageService.saveOrders(updated);
     setOrders(updated);
+
+    if (updatedTarget) {
+      cloudStorage.saveOrder(updatedTarget);
+    }
   };
 
   // Xác nhận hàng loạt
@@ -88,11 +127,13 @@ export const AppProvider = ({ children }) => {
     const now = new Date().toISOString();
     const updated = currentOrders.map(ord => {
       if (orderIds.includes(ord.id) || orderIds.includes(ord.orderCode)) {
-        return {
+        const up = {
           ...ord,
           refundStatus: 'CONFIRMED_RECEIVED',
           refundConfirmedAt: ord.refundConfirmedAt || now,
         };
+        cloudStorage.saveOrder(up);
+        return up;
       }
       return ord;
     });
@@ -106,24 +147,26 @@ export const AppProvider = ({ children }) => {
     const currentOrders = storageService.getOrders();
     const updated = currentOrders.map(ord => {
       if (orderIds.includes(ord.id) || orderIds.includes(ord.orderCode)) {
-        return {
-          ...ord,
-          refundStatus: 'DISPUTED',
-        };
+        const up = { ...ord, refundStatus: 'DISPUTED' };
+        cloudStorage.saveOrder(up);
+        return up;
       }
       return ord;
     });
     storageService.saveOrders(updated);
     setOrders(updated);
-    showNotification(`Đã gắn cờ Quá hạn / Cần khiếu nại cho ${orderIds.length} đơn!`, 'warning');
+    showNotification(`Đã gắn cờ Quá hạn cho ${orderIds.length} đơn!`, 'warning');
   };
 
-  // Nhập dữ liệu
-  const importOrders = (incomingOrders, targetAccountId, accountName) => {
+  // Nhập dữ liệu (Đồng bộ hàng loạt lên Supabase Cloud)
+  const importOrders = async (incomingOrders, targetAccountId, accountName) => {
     const result = storageService.mergeImportedOrders(incomingOrders, targetAccountId, accountName);
     setOrders(result.allOrders);
     setAccounts(result.allAccounts);
     showNotification(`Đã đồng bộ ${result.allOrders.length} đơn hàng (+${result.newCount} đơn mới)!`, 'success');
+
+    // Đồng bộ nền lên Supabase
+    cloudStorage.syncBulkOrders(incomingOrders, targetAccountId, accountName);
     return result;
   };
 
@@ -149,6 +192,7 @@ export const AppProvider = ({ children }) => {
     const updated = [...accounts, newAcc];
     setAccounts(updated);
     storageService.saveAccounts(updated);
+    cloudStorage.saveAccount(newAcc);
     showNotification(`Đã thêm người mua: ${newAcc.name}`, 'success');
     return newAcc;
   };
@@ -157,6 +201,8 @@ export const AppProvider = ({ children }) => {
     const updated = accounts.map(a => a.id === id ? { ...a, ...fields } : a);
     setAccounts(updated);
     storageService.saveAccounts(updated);
+    const target = updated.find(a => a.id === id);
+    if (target) cloudStorage.saveAccount(target);
     showNotification('Đã cập nhật tên tài khoản!', 'success');
   };
 
@@ -164,6 +210,7 @@ export const AppProvider = ({ children }) => {
     const updated = accounts.filter(a => a.id !== id);
     setAccounts(updated);
     storageService.saveAccounts(updated);
+    cloudStorage.deleteAccount(id);
     if (activeAccountId === id) setActiveAccountId('ALL');
     showNotification('Đã xóa tài khoản!', 'info');
   };
@@ -173,6 +220,7 @@ export const AppProvider = ({ children }) => {
     const updated = orders.filter(o => o.id !== orderId && o.orderCode !== orderId);
     setOrders(updated);
     storageService.saveOrders(updated);
+    cloudStorage.deleteOrders(orderId);
     showNotification('Đã xóa đơn hàng khỏi sổ!', 'info');
   };
 
@@ -182,6 +230,7 @@ export const AppProvider = ({ children }) => {
     const updated = orders.filter(o => !set.has(o.id) && !set.has(o.orderCode));
     setOrders(updated);
     storageService.saveOrders(updated);
+    cloudStorage.deleteOrders(orderIds);
     showNotification(`Đã xóa ${orderIds.length} đơn hàng khỏi sổ!`, 'info');
   };
 
@@ -248,10 +297,10 @@ export const AppProvider = ({ children }) => {
            o.refundStatus !== 'NO_REFUND_NEEDED' && o.refundStatus !== 'NOT_APPLICABLE'
     );
 
-    let totalRefundDue = 0; // Tổng số tiền hoàn
-    let totalReceived = 0;  // Đã nhận được
-    let totalPending = 0;   // Còn phải thu hồi
-    let totalDisputed = 0;  // Bị quá hạn/khiếu nại
+    let totalRefundDue = 0;
+    let totalReceived = 0;
+    let totalPending = 0;
+    let totalDisputed = 0;
     let pendingCount = 0;
     let confirmedCount = 0;
 
@@ -323,6 +372,7 @@ export const AppProvider = ({ children }) => {
         deleteOrder,
         batchDeleteOrders,
         markNoRefundNeeded,
+        isCloudSyncing,
       }}
     >
       {children}

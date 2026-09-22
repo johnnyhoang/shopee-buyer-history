@@ -1,5 +1,6 @@
 import React from 'react';
 import { useApp } from '../context/AppContext';
+import { useAuth } from '../context/AuthContext';
 import { 
   ShoppingBag, 
   RotateCcw, 
@@ -8,12 +9,13 @@ import {
   Users, 
   DownloadCloud, 
   RefreshCw, 
-  Puzzle, 
-  CheckCircle2,
-  AlertCircle
+  Puzzle,
+  LogOut,
+  User as UserIcon
 } from 'lucide-react';
 
 export const Navbar = () => {
+  const { user, logout } = useAuth();
   const { 
     accounts, 
     activeAccountId, 
@@ -25,8 +27,6 @@ export const Navbar = () => {
     setIsSyncModalOpen,
     resetSampleData
   } = useApp();
-
-  const activeAccount = accounts.find(a => a.id === activeAccountId);
 
   return (
     <header className="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-sm">
@@ -99,6 +99,29 @@ export const Navbar = () => {
             >
               <RefreshCw className="w-4 h-4" />
             </button>
+
+            {/* User Profile & Logout */}
+            {user && (
+              <div className="flex items-center gap-2 pl-2 border-l border-slate-200">
+                {user.avatarUrl ? (
+                  <img src={user.avatarUrl} alt={user.name} className="w-7 h-7 rounded-full border border-slate-200 object-cover" />
+                ) : (
+                  <div className="w-7 h-7 rounded-full bg-slate-200 flex items-center justify-center text-slate-600 font-bold text-xs">
+                    <UserIcon className="w-3.5 h-3.5" />
+                  </div>
+                )}
+                <span className="text-xs font-semibold text-slate-700 max-w-[100px] truncate hidden sm:inline" title={user.name || user.email}>
+                  {user.name || user.email}
+                </span>
+                <button
+                  onClick={logout}
+                  title="Đăng xuất"
+                  className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
+                >
+                  <LogOut className="w-4 h-4" />
+                </button>
+              </div>
+            )}
           </div>
 
         </div>

@@ -4,11 +4,7 @@ import { supabase } from '../lib/supabaseClient';
 const AUTH_KEY = 'shopee_ledger_auth_session_v1';
 
 // Cấu hình tài khoản nội bộ dự phòng
-const VALID_CREDENTIALS = {
-  username: 'thuynga',
-  password: 'abcd1234',
-  displayName: 'Thùy Nga',
-};
+// Hardcoded fallback credentials removed in favor of Supabase Google OAuth
 
 const AuthContext = createContext(null);
 
@@ -137,3 +133,4 @@ export const useAuth = () => {
   if (!context) throw new Error('useAuth must be used within an AuthProvider');
   return context;
 };
+
